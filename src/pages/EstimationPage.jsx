@@ -26,7 +26,13 @@ export default function EstimationPage() {
   const [pdfLoaded, setPdfLoaded] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
 
-  const mobile = application?.application?.mobile || application?.mobile || ''
+  const storedLogin = JSON.parse(localStorage.getItem("svs_gold_login_data"))
+const loggedInMobile =
+  localStorage.getItem("user_mobile") ||
+  storedLogin?.mobile ||
+  storedLogin?.account?.mobile ||
+  ''
+
 
   /* ---- Shared styles ---- */
   const inputClass =
@@ -120,7 +126,7 @@ export default function EstimationPage() {
 
       for (const item of items) {
         await applicationsAPI.addEstimation({
-          mobile,
+          mobile: loggedInMobile,
           estimation_no: estNo,
           item_name: item.item_name,
           quantity: item.quantity || 1,
@@ -135,7 +141,7 @@ export default function EstimationPage() {
       setSaved(true)
 
       setGeneratingPdf(true)
-      const previewRes = await applicationsAPI.getFinalPreview(mobile)
+      const previewRes = await applicationsAPI.getFinalPreview(loggedInMobile)
       const preview = previewRes.data
       setPreviewData(preview)
 
@@ -146,7 +152,7 @@ export default function EstimationPage() {
         name: preview?.account?.first_name
           ? `${preview.account.first_name} ${preview.account.last_name || ''}`.trim()
           : preview?.pledge_details?.pledger_name || '',
-        mobile,
+        mobile: loggedInMobile,
         application_no: preview?.application?.application_no || '',
         application_date: preview?.application?.application_date || '',
         items: items.map(item => {
@@ -235,7 +241,7 @@ export default function EstimationPage() {
                 Estimation
               </h1>
               <p className="text-gray-500 text-sm mt-1">
-                {application?.application?.application_no || 'Application'} • Mobile: {mobile}
+                {application?.application?.application_no || 'Application'} • Mobile: {loggedInMobile}
               </p>
             </div>
           </div>
@@ -509,7 +515,7 @@ export default function EstimationPage() {
                 <p className="text-indigo-200 text-sm mt-1">
                   {previewData?.account?.first_name
                     ? `${previewData.account.first_name} ${previewData.account.last_name || ''}`
-                    : mobile
+                    : loggedInMobile
                   }
                 </p>
               </div>
