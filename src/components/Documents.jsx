@@ -1,186 +1,184 @@
-import React, { useState } from 'react'
-import { ChevronDown, Upload, Trash2, AlertCircle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Upload, AlertCircle, CheckCircle, Camera, CreditCard, FileText, Building2, Image, FolderOpen } from 'lucide-react'
+
+const DOCUMENT_SLOTS = [
+  { key: 'Photo', label: 'Photo', icon: Camera, description: 'Passport-size photo' },
+  { key: 'Aadhar', label: 'Aadhar', icon: CreditCard, description: 'Aadhar card (front & back)' },
+  { key: 'PAN', label: 'PAN', icon: FileText, description: 'PAN card copy' },
+  { key: 'Address Proof', label: 'Address Proof', icon: Image, description: 'Utility bill, Voter ID, etc.' },
+  { key: 'Bank Details', label: 'Bank Details', icon: Building2, description: 'Passbook / Cancelled cheque' },
+  { key: 'Others', label: 'Others', icon: FolderOpen, description: 'Any additional documents' },
+]
 
 export default function Documents({ isOpen, onToggle, data, onDataChange }) {
-  const [documents, setDocuments] = useState(data.documents || [])
+  // Initialize one slot per document type
+  const initDocuments = () => {
+    const existing = data.documents || []
+    return DOCUMENT_SLOTS.map(slot => {
+      const found = existing.find(d => d.document_type === slot.key)
+      return found || {
+        id: `doc_${slot.key}_${Date.now()}`,
+        document_type: slot.key,
+        document_number: '',
+        file_path: '',
+        file_name: '',
+        file_size_mb: 0
+      }
+    })
+  }
+
+  const [documents, setDocuments] = useState(initDocuments)
   const [errors, setErrors] = useState({})
 
-  const documentTypes = ['Aadhar Card', 'PAN Card', 'Passport', 'Driving License', 'Voter ID', 'Bank Statement', 'Address Proof', 'Business License', 'GST Certificate', 'Other']
-
-  const handleDocumentChange = (index, field, value) => {
-    const newDocuments = [...documents]
-    newDocuments[index] = {
-      ...newDocuments[index],
-      [field]: value
-    }
-    setDocuments(newDocuments)
-    onDataChange('documents', newDocuments)
-  }
+  // Sync to parent on mount
+  useEffect(() => {
+    onDataChange('documents', documents)
+  }, [])
 
   const handleFileUpload = (index, e) => {
     const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        const newErrors = { ...errors }
-        newErrors[`doc_${index}_file`] = 'File size must be less than 5MB'
-        setErrors(newErrors)
-        return
-      }
+    if (!file) return
 
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const newDocuments = [...documents]
-        newDocuments[index] = {
-          ...newDocuments[index],
-          file_name: file.name,
-          file_size_mb: (file.size / (1024 * 1024)).toFixed(2),
-          file_path: event.target.result
-        }
-        setDocuments(newDocuments)
-        onDataChange('documents', newDocuments)
-
-        const newErrors = { ...errors }
-        delete newErrors[`doc_${index}_file`]
-        setErrors(newErrors)
-      }
-      reader.readAsDataURL(file)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, [`doc_${index}`]: 'File size must be less than 5MB' }))
+      return
     }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const newDocuments = [...documents]
+      newDocuments[index] = {
+        ...newDocuments[index],
+        file_name: file.name,
+        file_size_mb: (file.size / (1024 * 1024)).toFixed(2),
+        file_path: event.target.result
+      }
+      setDocuments(newDocuments)
+      onDataChange('documents', newDocuments)
+      setErrors(prev => { const n = { ...prev }; delete n[`doc_${index}`]; return n })
+    }
+    reader.readAsDataURL(file)
   }
 
-  const addNewDocument = () => {
-    const newDoc = {
-      id: Date.now(),
-      document_type: 'Aadhar Card',
-      document_number: '',
-      file_path: '',
+  const removeFile = (index) => {
+    const newDocuments = [...documents]
+    newDocuments[index] = {
+      ...newDocuments[index],
       file_name: '',
-      file_size_mb: 0
+      file_size_mb: 0,
+      file_path: ''
     }
-    setDocuments([...documents, newDoc])
-  }
-
-  const removeDocument = (index) => {
-    const newDocuments = documents.filter((_, i) => i !== index)
     setDocuments(newDocuments)
     onDataChange('documents', newDocuments)
   }
 
   return (
     <div className="bg-white/70 backdrop-blur-sm border border-white/50 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+      {/* Header — always visible, clicking toggles */}
       <button
-      type="button"
+        type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-6 hover:bg-gradient-to-r hover:from-indigo-50/50 hover:to-purple-50/50 transition-all duration-300"
+        className="w-full flex items-center justify-between p-6 hover:bg-gradient-to-r hover:from-amber-50/50 hover:to-amber-50/50 transition-all duration-300"
       >
-        <span className="text-lg font-semibold text-gray-800">Documents</span>
-        <div className="p-2 bg-indigo-50 rounded-lg">
-          <ChevronDown
-            size={24}
-            className={`text-indigo-600 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
-          />
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-semibold text-gray-800">Documents</span>
+          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+            {documents.filter(d => d.file_name).length}/{DOCUMENT_SLOTS.length} uploaded
+          </span>
+        </div>
+        <div className="p-2 bg-amber-50 rounded-lg">
+          <Upload size={20} className="text-amber-700" />
         </div>
       </button>
 
-      {isOpen && (
-        <div className="accordion-content space-y-6 px-6 py-6 bg-gradient-to-b from-white/50 to-indigo-50/30 border-t border-white/50">
-          {documents.length === 0 ? (
-            <button
-              onClick={addNewDocument}
-              className="w-full py-3 border-2 border-dashed border-indigo-400 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-all duration-300 flex items-center justify-center gap-2"
-            >
-              <Upload size={20} />
-              Add First Document
-            </button>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {documents.map((doc, index) => (
-                <div key={doc.id} className="bg-white/80 backdrop-blur-sm p-6 rounded-xl border-2 border-indigo-100/50 space-y-4 hover:shadow-md transition-all duration-300">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-800">Document {index + 1}</h3>
-                    <button
-                      onClick={() => removeDocument(index)}
-                      className="p-2 hover:bg-red-50 rounded-lg text-red-600 hover:text-red-800 transition-all duration-300"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+      {/* Always show content — no collapse */}
+      <div className="px-6 py-6 bg-gradient-to-b from-white/50 to-amber-50/30 border-t border-white/50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {documents.map((doc, index) => {
+            const slot = DOCUMENT_SLOTS[index]
+            if (!slot) return null
+            const Icon = slot.icon
+            const hasFile = !!doc.file_name
 
-                  {/* Document Type */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      Document Type
-                    </label>
-                    <select
-                      value={doc.document_type}
-                      onChange={(e) => handleDocumentChange(index, 'document_type', e.target.value)}
-                      className="w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300"
-                    >
-                      {documentTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
+            return (
+              <div
+                key={doc.document_type}
+                className={`relative p-5 rounded-xl border-2 transition-all duration-300 ${
+                  hasFile
+                    ? 'border-green-200 bg-green-50/50'
+                    : 'border-gray-200 bg-white/80 hover:border-amber-300 hover:shadow-md'
+                }`}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    hasFile ? 'bg-green-100' : 'bg-amber-50'
+                  }`}>
+                    {hasFile
+                      ? <CheckCircle size={20} className="text-green-600" />
+                      : <Icon size={20} className="text-amber-700" />
+                    }
                   </div>
-
-                  {/* Document Number */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      Document Number
-                    </label>
-                    <input
-                      type="text"
-                      value={doc.document_number}
-                      onChange={(e) => handleDocumentChange(index, 'document_number', e.target.value)}
-                      placeholder={`Enter ${doc.document_type} number`}
-                      className="w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300"
-                    />
-                  </div>
-
-                  {/* File Upload */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      Upload Document
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        onChange={(e) => handleFileUpload(index, e)}
-                        className="hidden"
-                        id={`file-${index}`}
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      />
-                      <label
-                        htmlFor={`file-${index}`}
-                        className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-indigo-400 rounded-xl cursor-pointer hover:bg-indigo-50 transition-all duration-300"
-                      >
-                        <Upload size={20} className="text-indigo-600" />
-                        <span className="text-indigo-600 font-semibold">
-                          {doc.file_name ? `${doc.file_name} (${doc.file_size_mb}MB)` : 'Click to upload'}
-                        </span>
-                      </label>
-                      <p className="text-xs text-gray-500 mt-2">Max size: 5MB. Formats: PDF, JPG, PNG, DOC</p>
-                    </div>
-                    {errors[`doc_${index}_file`] && (
-                      <p className="text-red-600 text-xs mt-2 flex items-center gap-1">
-                        <AlertCircle size={12} /> {errors[`doc_${index}_file`]}
-                      </p>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-800 text-sm">{slot.label}</h4>
+                    <p className="text-xs text-gray-400">{slot.description}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {documents.length > 0 && (
-            <button
-              onClick={addNewDocument}
-              className="w-full py-3 border-2 border-dashed border-indigo-400 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-all duration-300 flex items-center justify-center gap-2"
-            >
-              <Upload size={20} />
-              Add Another Document
-            </button>
-          )}
+                {/* Upload area */}
+                {hasFile ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-green-200">
+                      <FileText size={14} className="text-green-600 flex-shrink-0" />
+                      <span className="text-xs text-gray-700 truncate flex-1">{doc.file_name}</span>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{doc.file_size_mb}MB</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <label
+                        htmlFor={`file-${index}`}
+                        className="flex-1 text-center text-xs font-medium px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                        style={{ background: '#fdf8f0', color: '#a36e24' }}
+                      >
+                        Replace
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="text-xs font-medium text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor={`file-${index}`}
+                    className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-amber-300 rounded-xl cursor-pointer hover:bg-amber-50/50 transition-all duration-300"
+                  >
+                    <Upload size={20} className="text-amber-500" />
+                    <span className="text-xs font-semibold text-amber-700">Click to upload</span>
+                    <span className="text-[10px] text-gray-400">Max 5MB • PDF, JPG, PNG</span>
+                  </label>
+                )}
+
+                <input
+                  type="file"
+                  onChange={(e) => handleFileUpload(index, e)}
+                  className="hidden"
+                  id={`file-${index}`}
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                />
+
+                {errors[`doc_${index}`] && (
+                  <p className="text-red-600 text-xs mt-2 flex items-center gap-1">
+                    <AlertCircle size={12} /> {errors[`doc_${index}`]}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
-      )}
+      </div>
     </div>
   )
 }

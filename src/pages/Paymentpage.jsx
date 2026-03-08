@@ -80,7 +80,7 @@ const loggedInMobile =
   /*  STYLES                                                          */
   /* ================================================================ */
   const inputClass =
-    'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
+    'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
   const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide'
   const readOnlyClass =
     'w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-700 font-medium cursor-not-allowed'
@@ -243,12 +243,12 @@ const loggedInMobile =
   /* ================================================================ */
   if (!appData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-8">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-amber-50 to-amber-50 flex items-center justify-center p-8">
         <div className="bg-white rounded-2xl shadow-lg p-10 text-center max-w-md">
           <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-800 mb-2">No Data Found</h2>
           <p className="text-gray-500 mb-6">Please complete the estimation first.</p>
-          <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl">
+          <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-amber-700 text-white font-bold rounded-xl">
             Go to Dashboard
           </button>
         </div>
@@ -270,16 +270,16 @@ const loggedInMobile =
   /*  RENDER                                                          */
   /* ================================================================ */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-amber-50 to-amber-50 py-10 px-4">
       <div className="max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-3 bg-white hover:bg-gray-50 rounded-xl shadow-md transition-all">
-            <ChevronLeft size={22} className="text-indigo-600" />
+            <ChevronLeft size={22} className="text-amber-700" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-700 to-amber-700 bg-clip-text text-transparent">
               Payment
             </h1>
             <p className="text-gray-500 text-sm mt-1">Invoice & Settlement • {loggedInMobile}</p>
@@ -294,12 +294,12 @@ const loggedInMobile =
                 <div className="flex flex-col items-center flex-1">
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${
                     allComplete || step > s.num ? 'bg-green-500 text-white'
-                    : step === s.num ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : step === s.num ? 'bg-amber-700 text-white shadow-lg shadow-amber-600/30'
                     : 'bg-gray-200 text-gray-500'
                   }`}>
                     {allComplete || step > s.num ? <Check size={20} /> : <s.icon size={20} />}
                   </div>
-                  <span className={`text-xs mt-2 font-medium text-center ${step >= s.num ? 'text-indigo-600' : 'text-gray-400'}`}>
+                  <span className={`text-xs mt-2 font-medium text-center ${step >= s.num ? 'text-amber-700' : 'text-gray-400'}`}>
                     {s.label}
                   </span>
                 </div>
@@ -356,7 +356,7 @@ const loggedInMobile =
               <textarea value={invoice.remarks} onChange={e => setInvoice(p => ({ ...p, remarks: e.target.value }))} rows={3} placeholder="Optional remarks..." className={inputClass} />
             </div>
 
-            <button onClick={handleStep1} disabled={loading} className="w-full py-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
+            <button onClick={handleStep1} disabled={loading} className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
               {loading ? <><Loader size={20} className="animate-spin" /> Saving...</> : <>Save Invoice & Next <ChevronRight size={20} /></>}
             </button>
           </div>
@@ -373,7 +373,7 @@ const loggedInMobile =
                   <h2 className="text-xl font-bold text-gray-800">Invoice Items</h2>
                   <p className="text-sm text-gray-500 mt-1">Add items with melting weights and rates</p>
                 </div>
-                <button onClick={addInvoiceItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 transition-all">
+                <button onClick={addInvoiceItem} className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
                   <Plus size={18} /> Add Item
                 </button>
               </div>
@@ -429,7 +429,7 @@ const loggedInMobile =
               <button onClick={() => { setStep(1); setError('') }} className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2">
                 <ChevronLeft size={20} /> Back
               </button>
-              <button onClick={handleStep2} disabled={loading} className="flex-[2] py-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
+              <button onClick={handleStep2} disabled={loading} className="flex-[2] py-4 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
                 {loading ? <><Loader size={20} className="animate-spin" /> Saving Items...</> : <>Save Items & Next <ChevronRight size={20} /></>}
               </button>
             </div>
@@ -447,7 +447,7 @@ const loggedInMobile =
                   <h2 className="text-xl font-bold text-gray-800">Deductions</h2>
                   <p className="text-sm text-gray-500 mt-1">Add any deductions against invoice items (optional)</p>
                 </div>
-                <button onClick={addDeduction} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 transition-all">
+                <button onClick={addDeduction} className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
                   <Plus size={18} /> Add Deduction
                 </button>
               </div>
@@ -500,7 +500,7 @@ const loggedInMobile =
               <button onClick={() => { setStep(2); setError('') }} className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2">
                 <ChevronLeft size={20} /> Back
               </button>
-              <button onClick={handleStep3} disabled={loading} className="flex-[2] py-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
+              <button onClick={handleStep3} disabled={loading} className="flex-[2] py-4 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-lg">
                 {loading ? <><Loader size={20} className="animate-spin" /> Saving...</> : <>{deductions.length === 0 ? 'Skip & Next' : 'Save Deductions & Next'} <ChevronRight size={20} /></>}
               </button>
             </div>
@@ -594,7 +594,7 @@ const loggedInMobile =
 
             {/* Items Summary */}
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-5">
+              <div className="bg-gradient-to-r from-amber-700 to-amber-700 px-8 py-5">
                 <h3 className="text-lg font-bold text-white">Invoice Items</h3>
               </div>
               <div className="p-6 overflow-x-auto">
@@ -616,7 +616,7 @@ const loggedInMobile =
                         <td className="py-3 px-2 text-right text-gray-600">₹{item.gold_rate_per_gm}</td>
                         <td className="py-3 px-2 text-right text-gray-600">₹{item.gross_amount}</td>
                         <td className="py-3 px-2 text-right text-red-600">-₹{item.deductions_amount}</td>
-                        <td className="py-3 px-2 text-right font-bold text-indigo-700">₹{item.net_amount}</td>
+                        <td className="py-3 px-2 text-right font-bold text-amber-800">₹{item.net_amount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -644,7 +644,7 @@ const loggedInMobile =
             {/* Preview Button */}
             <button
               onClick={handlePreview}
-              className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-3 text-lg transition-all"
+              className="w-full py-4 bg-gradient-to-r from-amber-700 to-amber-700 hover:from-amber-800 hover:to-amber-800 text-white font-bold rounded-xl shadow-lg shadow-amber-600/30 flex items-center justify-center gap-3 text-lg transition-all"
             >
               <Eye size={22} />
               Preview the Details
@@ -662,9 +662,9 @@ const loggedInMobile =
 
 function SummaryCard({ label, value, color }) {
   const colorMap = {
-    indigo: 'from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700',
+    indigo: 'from-amber-50 to-amber-100 border-amber-200 text-amber-800',
     green: 'from-green-50 to-green-100 border-green-200 text-green-700',
-    purple: 'from-purple-50 to-purple-100 border-purple-200 text-purple-700',
+    purple: 'from-amber-50 to-amber-100 border-amber-200 text-amber-800',
     emerald: 'from-emerald-50 to-emerald-100 border-emerald-200 text-emerald-700',
   }
   return (

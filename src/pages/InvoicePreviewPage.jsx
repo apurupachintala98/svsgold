@@ -80,7 +80,7 @@ export default function InvoicePreviewPage() {
           <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">No Invoice Data</h2>
           <p className="text-gray-500 mb-6">Complete the payment flow first.</p>
-          <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl">Dashboard</button>
+          <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-amber-700 text-white font-bold rounded-xl">Dashboard</button>
         </div>
       </div>
     )
@@ -89,7 +89,7 @@ export default function InvoicePreviewPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <Loader size={48} className="text-indigo-600 animate-spin" />
+        <Loader size={48} className="text-amber-700 animate-spin" />
       </div>
     )
   }
@@ -127,7 +127,7 @@ export default function InvoicePreviewPage() {
 
             {/* ---- Green Header ---- */}
             <div style={{
-              background: 'linear-gradient(135deg, #16a34a, #15803d)',
+              background: 'linear-gradient(135deg, #c9943a, #a36e24)',
               padding: '36px 40px',
               display: 'flex',
               justifyContent: 'space-between',
@@ -161,7 +161,7 @@ export default function InvoicePreviewPage() {
             }}>
               {/* Billed To */}
               <div>
-                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #16a34a', paddingLeft: '8px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #a36e24', paddingLeft: '8px' }}>
                   Billed to
                 </div>
                 <div style={{ fontWeight: '700', fontSize: '15px', color: '#111' }}>{customerName || 'Customer'}</div>
@@ -172,7 +172,7 @@ export default function InvoicePreviewPage() {
 
               {/* Invoice Details */}
               <div>
-                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #16a34a', paddingLeft: '8px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #a36e24', paddingLeft: '8px' }}>
                   Invoice Details
                 </div>
                 <table style={{ fontSize: '12px', color: '#374151', lineHeight: '2' }}>
@@ -186,7 +186,7 @@ export default function InvoicePreviewPage() {
 
               {/* Payment Record */}
               <div>
-                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #16a34a', paddingLeft: '8px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', borderLeft: '3px solid #a36e24', paddingLeft: '8px' }}>
                   Payment Record
                 </div>
                 <div style={{ fontSize: '12px', color: '#374151', lineHeight: '2' }}>
@@ -203,14 +203,14 @@ export default function InvoicePreviewPage() {
             <div style={{ padding: '0 40px 20px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ background: '#f0fdf4', borderTop: '2px solid #16a34a', borderBottom: '2px solid #16a34a' }}>
+                  <tr style={{ background: '#fdf8f0', borderTop: '2px solid #a36e24', borderBottom: '2px solid #a36e24' }}>
                     {['Item #/Description', 'Wt Before', 'Wt After', 'Purity %', 'Rate/g', 'Deductions', 'Net Amount'].map((h, i) => (
                       <th key={h} style={{
                         padding: '12px 10px',
                         textAlign: i === 0 ? 'left' : 'right',
                         fontWeight: '700',
                         fontSize: '11px',
-                        color: '#16a34a',
+                        color: '#a36e24',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}>{h}</th>
@@ -262,7 +262,7 @@ export default function InvoicePreviewPage() {
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
                     Invoice total in words
                   </div>
-                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#16a34a', lineHeight: '1.4' }}>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#a36e24', lineHeight: '1.4' }}>
                     {invoice.amount_in_words || '—'}
                   </div>
                 </div>
@@ -284,7 +284,7 @@ export default function InvoicePreviewPage() {
                       <tr>
                         <td style={{ padding: '8px 6px', color: '#374151' }}>{settlement?.payment_date}</td>
                         <td style={{ padding: '8px 6px' }}>
-                          <span style={{ background: '#dcfce7', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600' }}>
+                          <span style={{ background: '#dcfce7', color: '#a36e24', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600' }}>
                             {settlement?.payment_mode?.replace('_', ' ')}
                           </span>
                         </td>
@@ -335,7 +335,7 @@ export default function InvoicePreviewPage() {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
                     <span style={{ color: '#6b7280' }}>Paid Amount</span>
-                    <span style={{ fontWeight: '600', color: '#16a34a' }}>₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span style={{ fontWeight: '600', color: '#a36e24' }}>₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
                   {/* Total Due - BIG */}
@@ -393,7 +393,7 @@ export default function InvoicePreviewPage() {
 
             {/* ---- Green Bottom Bar ---- */}
             <div style={{
-              background: 'linear-gradient(135deg, #16a34a, #15803d)',
+              background: 'linear-gradient(135deg, #c9943a, #a36e24)',
               padding: '14px 40px',
               textAlign: 'center',
               fontSize: '11px',
@@ -409,7 +409,7 @@ export default function InvoicePreviewPage() {
           <button onClick={handlePrint} className="flex-1 py-4 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all">
             <Printer size={20} /> Print Invoice
           </button>
-          <button onClick={() => navigate('/dashboard')} className="flex-1 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all">
+          <button onClick={() => navigate('/dashboard')} className="flex-1 py-4 bg-gradient-to-r from-amber-700 to-amber-700 hover:from-amber-800 hover:to-amber-800 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all">
             Back to Dashboard
           </button>
         </div>

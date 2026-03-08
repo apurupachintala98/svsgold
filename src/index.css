@@ -2,6 +2,21 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
+:root {
+  /* Gold Theme Colors */
+  --gold-50: #fdf8f0;
+  --gold-100: #f9edda;
+  --gold-200: #f0d5a8;
+  --gold-300: #e4b96e;
+  --gold-400: #d4a04a;
+  --gold-500: #a36e24;
+  --gold-600: #8b5c1c;
+  --gold-700: #6e4816;
+  --gold-800: #553712;
+  --gold-900: #3d280e;
+  --gold-950: #2a1a08;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -23,7 +38,13 @@ body {
 
 /* Rich text field styles */
 .rich-input {
-  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-glow-subtle transition-all duration-200 text-gray-900;
+  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent shadow-sm transition-all duration-200 text-gray-900;
+  --tw-ring-color: var(--gold-500);
+}
+
+.rich-input:focus {
+  --tw-ring-color: var(--gold-500);
+  border-color: var(--gold-500);
 }
 
 .rich-input::placeholder {
@@ -31,27 +52,35 @@ body {
 }
 
 .rich-input:hover {
-  @apply shadow-glow;
+  @apply shadow-md;
 }
 
 .rich-select {
-  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-glow-subtle transition-all duration-200 text-gray-900 cursor-pointer;
+  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent shadow-sm transition-all duration-200 text-gray-900 cursor-pointer;
+  --tw-ring-color: var(--gold-500);
 }
 
 .rich-select:hover {
-  @apply shadow-glow;
+  @apply shadow-md;
 }
 
 .rich-textarea {
-  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-glow-subtle transition-all duration-200 text-gray-900;
+  @apply px-4 py-3 bg-gradient-to-b from-white to-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent shadow-sm transition-all duration-200 text-gray-900;
+  --tw-ring-color: var(--gold-500);
 }
 
 .rich-textarea:hover {
-  @apply shadow-glow;
+  @apply shadow-md;
 }
 
 .btn-primary {
-  @apply w-full py-3 bg-primary hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-200 shadow-glow-subtle hover:shadow-glow;
+  @apply w-full py-3 text-white font-semibold rounded-lg transition-colors duration-200 shadow-sm;
+  background: linear-gradient(135deg, #c9943a, #a36e24);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #a36e24, #8b5c1c);
+  @apply shadow-md;
 }
 
 .btn-secondary {
@@ -64,4 +93,44 @@ body {
 
 .accordion-content {
   @apply px-6 py-4 bg-white;
+}
+
+/* Gold gradient utility classes */
+.bg-gold-gradient {
+  background: linear-gradient(135deg, #c9943a, #a36e24);
+}
+
+.bg-gold-gradient-dark {
+  background: linear-gradient(135deg, #a36e24, #6e4816);
+}
+
+.bg-gold-gradient-light {
+  background: linear-gradient(135deg, #f0d5a8, #e4b96e);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #c9943a, #a36e24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.border-gold {
+  border-color: #a36e24;
+}
+
+.shadow-gold {
+  box-shadow: 0 4px 14px 0 rgba(163, 110, 36, 0.3);
+}
+
+.shadow-gold-lg {
+  box-shadow: 0 10px 25px -3px rgba(163, 110, 36, 0.3);
+}
+
+/* Focus ring gold */
+.focus-gold:focus {
+  --tw-ring-color: rgba(163, 110, 36, 0.4);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--tw-ring-color);
+  border-color: #a36e24;
 }

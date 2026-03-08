@@ -18,11 +18,6 @@ export const validatePAN = (pan) => {
   return panRegex.test(pan)
 }
 
-export const validateGST = (gst) => {
-  const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[0-9]{1}$/
-  return gstRegex.test(gst)
-}
-
 export const validatePincode = (pincode) => {
   const pincodeRegex = /^[0-9]{6}$/
   return pincodeRegex.test(pincode)
@@ -45,10 +40,6 @@ export const validatePhone = (phone) => {
 export const validateDateOfBirth = (dob) => {
   const date = new Date(dob)
   return date instanceof Date && !isNaN(date) && date < new Date()
-}
-
-export const validateYearlyIncome = (income) => {
-  return !isNaN(income) && income >= 0
 }
 
 // Document validations
@@ -79,7 +70,7 @@ export const validateDocumentFile = (file) => {
 export const validateCreateAccountForm = (formData, addresses, bankAccounts, documents) => {
   const errors = {}
   
-  // Account Information validation (Required fields only)
+  // === Account Information (required fields only) ===
   if (!formData.first_name?.trim()) {
     errors.first_name = 'First name is required'
   }
@@ -100,7 +91,7 @@ export const validateCreateAccountForm = (formData, addresses, bankAccounts, doc
     errors.email = 'Invalid email format'
   }
   
-  // Optional fields validation (only if provided)
+  // === Optional field validation (only if a value is provided) ===
   if (formData.phone && !validatePhone(formData.phone)) {
     errors.phone = 'Phone must be 10 digits'
   }
@@ -113,36 +104,34 @@ export const validateCreateAccountForm = (formData, addresses, bankAccounts, doc
     errors.pan_no = 'PAN must be in format: ABCDE1234F'
   }
   
-  if (formData.gst_no && !validateGST(formData.gst_no)) {
-    errors.gst_no = 'GST must be 15 characters'
-  }
-  
   if (formData.date_of_birth && !validateDateOfBirth(formData.date_of_birth)) {
     errors.date_of_birth = 'Date of birth must be in the past'
   }
-  
-  if (formData.yearly_income && !validateYearlyIncome(formData.yearly_income)) {
-    errors.yearly_income = 'Yearly income must be a valid number'
-  }
-  
-  if (formData.pincode && !validatePincode(formData.pincode)) {
-    errors.pincode = 'Pincode must be 6 digits'
-  }
-  
-  // Address validation - ONLY if addresses array has items
+
+  // === Address validation ===
+  // Only validate addresses that have some content filled in
   addresses.forEach((address, index) => {
-    if (!address.address_line?.trim()) {
-      errors[`address_${index}_line`] = 'Address line is required'
-    }
+    const hasAnyContent = address.address_line?.trim() || address.pincode?.trim() || address.state?.trim()
     
-    if (!address.pincode?.trim()) {
-      errors[`address_${index}_pincode`] = 'Pincode is required'
-    } else if (!validatePincode(address.pincode)) {
+    // If it's Present or Permanent, address_line is required
+    if (address.address_type === 'Present' || address.address_type === 'Permanent') {
+      if (!address.address_line?.trim()) {
+        errors[`address_${index}_line`] = `${address.address_type} address line is required`
+      }
+    } else if (hasAnyContent) {
+      // For any other address type, only validate if partially filled
+      if (!address.address_line?.trim()) {
+        errors[`address_${index}_line`] = 'Address line is required'
+      }
+    }
+
+    // Only validate pincode if one was entered
+    if (address.pincode?.trim() && !validatePincode(address.pincode)) {
       errors[`address_${index}_pincode`] = 'Pincode must be 6 digits'
     }
   })
   
-  // Bank Account validation - ONLY if bankAccounts array has items
+  // === Bank Account validation — only if bank accounts were added ===
   bankAccounts.forEach((bank, index) => {
     if (!bank.bank_name?.trim()) {
       errors[`bank_${index}_name`] = 'Bank name is required'
@@ -164,22 +153,6 @@ export const validateCreateAccountForm = (formData, addresses, bankAccounts, doc
       errors[`bank_${index}_holder`] = 'Account holder name is required'
     }
   })
-  
-  // Documents validation - ONLY if documents array has items
-  documents.forEach((doc, index) => {
-    if (!doc.document_type) {
-      errors[`doc_${index}_type`] = 'Document type is required'
-    }
     
-    if (!doc.document_number?.trim()) {
-      errors[`doc_${index}_number`] = 'Document number is required'
-    }
-    
-    if (!doc.file_name) {
-      errors[`doc_${index}_file`] = 'Document file is required'
-    }
-  })
-  
   return { errors, isValid: Object.keys(errors).length === 0 }
 }
-

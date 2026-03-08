@@ -10,16 +10,15 @@ import { validateCreateAccountForm } from '../utils/validation'
 export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess }) {
 
   const generateAccountCode = () => {
-  const uuid = crypto.randomUUID()
-  const numericPart = uuid.replace(/\D/g, '')
-  const randomThreeDigits = numericPart.slice(0, 3).padEnd(3, '0')
-
-  return `CUS_SVS_${randomThreeDigits}`
-}
+    const uuid = crypto.randomUUID()
+    const numericPart = uuid.replace(/\D/g, '')
+    const randomThreeDigits = numericPart.slice(0, 3).padEnd(3, '0')
+    return `CUS_SVS_${randomThreeDigits}`
+  }
 
   const [formData, setFormData] = useState({
     account_type: '',
-     account_code: generateAccountCode(),
+    account_code: generateAccountCode(),
     first_name: '',
     last_name: '',
     contact_person: '',
@@ -47,9 +46,9 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
 
   const [openSections, setOpenSections] = useState({
     account: true,
-    address: false,
+    address: true,
     bank: false,
-    documents: false
+    documents: true   // Documents always visible
   })
 
   const [loading, setLoading] = useState(false)
@@ -73,11 +72,9 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Prevent double submission
+
     if (loading) return
-    
-    // Comprehensive validation
+
     const { errors, isValid } = validateCreateAccountForm(
       formData,
       formData.addresses,
@@ -88,12 +85,7 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
     if (!isValid) {
       setValidationErrors(errors)
       setError('Please fix all validation errors before submitting.')
-      
-      // Scroll to first error
-      const errorKeys = Object.keys(errors)
-      if (errorKeys.length > 0) {
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
@@ -108,16 +100,16 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
         account_code: formData.account_code || '',
         first_name: formData.first_name || '',
         last_name: formData.last_name || '',
-        contact_person: formData.contact_person || '',
+        contact_person: '',
         mobile: formData.mobile || '',
         phone: formData.phone || '',
         email: formData.email || '',
         gender: formData.gender || '',
         date_of_birth: formData.date_of_birth || '',
         aadhar_no: formData.aadhar_no || '',
-        yearly_income: formData.yearly_income || 0,
+        yearly_income: 0,
         occupation: formData.occupation || '',
-        gst_no: formData.gst_no || '',
+        gst_no: '',
         pan_no: formData.pan_no || '',
         source: 'web',
         owner: 'admin',
@@ -129,11 +121,10 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
       }
 
       const accountResponse = await accountsAPI.createAccount(accountPayload)
-      
+
       if (formData.addresses && formData.addresses.length > 0) {
-        console.log('[CreateAccountPage] Step 2: Saving addresses...')
-        for (let i = 0; i < formData.addresses.length; i++) {
-          const address = formData.addresses[i]
+        for (const address of formData.addresses) {
+          if (!address.address_line?.trim()) continue
           const addressPayload = {
             address_type: address.address_type || '',
             address_line: address.address_line || '',
@@ -145,14 +136,10 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
           }
           await accountsAPI.addAddress(formData.mobile, addressPayload)
         }
-      } else {
-        console.log('')
       }
 
       if (formData.bank_accounts && formData.bank_accounts.length > 0) {
-        console.log('[CreateAccountPage] Step 3: Saving bank accounts...')
-        for (let i = 0; i < formData.bank_accounts.length; i++) {
-          const bank = formData.bank_accounts[i]
+        for (const bank of formData.bank_accounts) {
           const bankPayload = {
             bank_name: bank.bank_name || '',
             branch: bank.branch || '',
@@ -164,14 +151,11 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
           }
           await accountsAPI.addBankAccount(formData.mobile, bankPayload)
         }
-      } else {
-        console.log('')
       }
 
       if (formData.documents && formData.documents.length > 0) {
-        console.log('[CreateAccountPage] Step 4: Saving documents...')
-        for (let i = 0; i < formData.documents.length; i++) {
-          const doc = formData.documents[i]
+        for (const doc of formData.documents) {
+          if (!doc.file_name) continue
           const docPayload = {
             document_type: doc.document_type || '',
             document_number: doc.document_number || '',
@@ -181,12 +165,10 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
           }
           await accountsAPI.addDocument(formData.mobile, docPayload)
         }
-      } else {
-        console.log('')
       }
 
       setSuccess('Account created successfully!')
-      
+
       setTimeout(() => {
         onSuccess(accountResponse.data)
       }, 1500)
@@ -199,7 +181,7 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 py-12 px-4">
+    <div className="min-h-screen py-12 px-4" style={{ background: 'linear-gradient(135deg, #fdf8f0, #f9edda, #fdf8f0)' }}>
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex items-start gap-6">
@@ -207,13 +189,13 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
             onClick={onBackToLogin}
             className="p-3 hover:bg-white/80 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg"
           >
-            <ChevronLeft size={24} className="text-indigo-600" />
+            <ChevronLeft size={24} style={{ color: '#a36e24' }} />
           </button>
           <div className="flex-1">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+            <h1 className="text-4xl font-bold mb-2" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               Create New Account
             </h1>
-            <p className="text-gray-600">Complete all sections to set up your account</p>
+            <p className="text-gray-600">Complete all sections to set up the customer account</p>
           </div>
         </div>
 
@@ -273,12 +255,13 @@ export default function CreateAccountPage({ loginData, onBackToLogin, onSuccess 
               onClick={onBackToLogin}
               className="flex-1 py-3 px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-300 shadow-sm hover:shadow-md"
             >
-              Back to Login
+              Back
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-3 px-6 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-600/40 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5"
+              className="flex-1 py-3 px-6 text-white font-bold rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)', boxShadow: '0 4px 14px 0 rgba(163, 110, 36, 0.3)' }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

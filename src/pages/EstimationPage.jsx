@@ -36,7 +36,7 @@ const loggedInMobile =
 
   /* ---- Shared styles ---- */
   const inputClass =
-    'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
+    'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
 
   const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5'
 
@@ -201,7 +201,7 @@ const loggedInMobile =
 
   if (!application) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-8">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-amber-50 to-amber-50 flex items-center justify-center p-8">
         <div className="bg-white rounded-2xl shadow-lg p-10 text-center max-w-md">
           <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-800 mb-2">No Application Data</h2>
@@ -210,7 +210,7 @@ const loggedInMobile =
           </p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
+            className="px-6 py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl transition-all"
           >
             Go to Dashboard
           </button>
@@ -224,7 +224,7 @@ const loggedInMobile =
   /* ================================================================ */
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-amber-50 to-amber-50 py-10 px-4">
       <div className="max-w-5xl mx-auto space-y-8">
 
         {/* ---- Header ---- */}
@@ -234,10 +234,10 @@ const loggedInMobile =
               onClick={() => navigate('/dashboard')}
               className="p-3 bg-white hover:bg-gray-50 rounded-xl shadow-md transition-all"
             >
-              <ChevronLeft size={22} className="text-indigo-600" />
+              <ChevronLeft size={22} className="text-amber-700" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-700 to-amber-800 bg-clip-text text-transparent">
                 Estimation
               </h1>
               <p className="text-gray-500 text-sm mt-1">
@@ -248,7 +248,7 @@ const loggedInMobile =
 
           {!saved && (
             <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm">
-              <Calculator size={18} className="text-indigo-500" />
+              <Calculator size={18} className="text-amber-600" />
               <span className="text-sm font-semibold text-gray-700">
                 Total: ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
@@ -273,12 +273,12 @@ const loggedInMobile =
             {/* Items */}
             {items.length === 0 && (
               <div className="bg-white rounded-2xl shadow-lg p-10 text-center">
-                <FileText size={48} className="mx-auto text-indigo-300 mb-4" />
+                <FileText size={48} className="mx-auto text-amber-300 mb-4" />
                 <h3 className="text-lg font-bold text-gray-800 mb-2">No Items Added</h3>
                 <p className="text-gray-500 mb-6">Add gold items to estimate their value</p>
                 <button
                   onClick={addItem}
-                  className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg"
+                  className="px-8 py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl transition-all shadow-lg"
                 >
                   <Plus size={18} className="inline mr-2" />
                   Add First Item
@@ -302,7 +302,7 @@ const loggedInMobile =
                       )}
                     </h4>
                     <div className="flex items-center gap-4">
-                      <span className="text-sm font-semibold text-indigo-600">
+                      <span className="text-sm font-semibold text-amber-700">
                         ₹{calc.netAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                       <button
@@ -379,7 +379,7 @@ const loggedInMobile =
                     </div>
                     <div>
                       <label className={labelClass}>Net Weight (gms)</label>
-                      <div className="px-4 py-3 bg-indigo-50 border-2 border-indigo-100 rounded-xl text-indigo-700 font-semibold">
+                      <div className="px-4 py-3 bg-amber-50 border-2 border-amber-100 rounded-xl text-amber-800 font-semibold">
                         {calc.netWeight.toFixed(2)} gms
                       </div>
                     </div>
@@ -426,7 +426,7 @@ const loggedInMobile =
               <div className="space-y-4">
                 <button
                   onClick={addItem}
-                  className="w-full py-3 border-2 border-dashed border-indigo-400 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 border-2 border-dashed border-amber-500 text-amber-700 font-semibold rounded-xl hover:bg-amber-50 transition-all flex items-center justify-center gap-2"
                 >
                   <Plus size={18} />
                   Add Another Item
@@ -435,7 +435,7 @@ const loggedInMobile =
                 {/* Grand Total */}
                 <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center justify-between">
                   <span className="text-lg font-bold text-gray-800">Grand Total</span>
-                  <span className="text-2xl font-bold text-indigo-700">
+                  <span className="text-2xl font-bold text-amber-800">
                     ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -490,7 +490,7 @@ const loggedInMobile =
                   <a
                     href={pdfUrl}
                     download={`${estimationNo}_Estimation.pdf`}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all"
                   >
                     <Download size={16} />
                     Download
@@ -510,9 +510,9 @@ const loggedInMobile =
 
             {/* Estimation Summary Table */}
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-5">
+              <div className="bg-gradient-to-r from-amber-700 to-amber-800 px-8 py-5">
                 <h3 className="text-lg font-bold text-white">Estimation Summary</h3>
-                <p className="text-indigo-200 text-sm mt-1">
+                <p className="text-amber-200 text-sm mt-1">
                   {previewData?.account?.first_name
                     ? `${previewData.account.first_name} ${previewData.account.last_name || ''}`
                     : loggedInMobile
@@ -543,7 +543,7 @@ const loggedInMobile =
                           <td className="py-3 px-3 text-right text-gray-600">{c.netWeight.toFixed(2)}g</td>
                           <td className="py-3 px-3 text-right text-gray-600">₹{item.gold_rate_per_gm}</td>
                           <td className="py-3 px-3 text-right text-gray-600">{item.deduction_percentage}%</td>
-                          <td className="py-3 px-3 text-right font-bold text-indigo-700">₹{c.netAmount.toFixed(2)}</td>
+                          <td className="py-3 px-3 text-right font-bold text-amber-800">₹{c.netAmount.toFixed(2)}</td>
                         </tr>
                       )
                     })}
@@ -551,7 +551,7 @@ const loggedInMobile =
                   <tfoot>
                     <tr className="border-t-2 border-gray-200">
                       <td colSpan={6} className="py-4 px-3 text-right font-bold text-gray-800 text-base">Grand Total</td>
-                      <td className="py-4 px-3 text-right font-bold text-indigo-700 text-xl">
+                      <td className="py-4 px-3 text-right font-bold text-amber-800 text-xl">
                         ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -565,7 +565,7 @@ const loggedInMobile =
               <a
                 href={pdfUrl}
                 download={`${estimationNo}_Estimation.pdf`}
-                className="flex-1 flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg"
+                className="flex-1 flex items-center justify-center gap-2 py-4 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl transition-all shadow-lg"
               >
                 <Download size={20} />
                 Download Estimation PDF
