@@ -341,19 +341,11 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
         </div>
       </div>
 
-      {/* BOTTOM ACTIONS */}
-      <div className="flex gap-3">
-  <button
-    onClick={handleDownloadPdf}
-    className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl shadow-lg font-medium"
-    style={{ background: "linear-gradient(135deg,#c9943a,#a36e24)" }}
-  >
-    <Download size={18} /> Download PDF
-  </button>
-</div>
-      <button onClick={() => navigate('/estimation', { state: { application: previewData } })} className="w-full py-4 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg transition-all no-print" style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
-        Accept & Continue to Estimation →
-      </button>
+      <div className="flex justify-center no-print">
+        <button onClick={() => navigate('/estimation', { state: { application: previewData } })} className="px-10 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
+          Accept & Continue to Estimation →
+        </button>
+      </div>
     </div>
   )
 }
