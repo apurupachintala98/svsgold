@@ -42,8 +42,38 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
   const [addresses, setAddresses] = useState(initAddresses)
   const [sameAsPermanent, setSameAsPermanent] = useState(false)
   const [errors, setErrors] = useState({})
+  const [pincodeLoading, setPincodeLoading] = useState({})
 
   const states = getAllStates()
+
+  // Fetch pincode data from India Post API
+  const fetchPincodeData = async (pincode, index, currentAddresses) => {
+    setPincodeLoading(prev => ({ ...prev, [index]: true }))
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`)
+      const data = await res.json()
+      if (data?.[0]?.Status === 'Success' && data[0].PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0]
+        const updated = [...currentAddresses]
+        updated[index] = {
+          ...updated[index],
+          state: po.State || updated[index].state,
+          district: po.District || updated[index].district,
+          city: po.Block && po.Block !== 'NA' ? po.Block : (po.Name || updated[index].city)
+        }
+        // If same-as-permanent is on, mirror to permanent
+        if (sameAsPermanent && index === 0) {
+          updated[1] = { ...updated[1], state: updated[0].state, district: updated[0].district, city: updated[0].city, pincode: updated[0].pincode, address_line: updated[0].address_line, street: updated[0].street, country: updated[0].country }
+        }
+        setAddresses(updated)
+        onDataChange('addresses', updated)
+      }
+    } catch (e) {
+      console.log('Pincode API failed, using local data if available')
+    } finally {
+      setPincodeLoading(prev => ({ ...prev, [index]: false }))
+    }
+  }
 
   // Sync to parent on mount
   useEffect(() => {
@@ -66,15 +96,37 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
     }
 
     // Auto-populate state/district/city when pincode is entered (6 digits)
-    if (field === 'pincode' && value.length === 6) {
-      const locationData = getStateByPincode(value)
-      if (locationData) {
+    if (field === 'pincode') {
+      if (value.length === 6) {
+        // Try local data first
+        const localData = getStateByPincode(value)
+        if (localData) {
+          newAddresses[index] = {
+            ...newAddresses[index],
+            pincode: value,
+            state: localData.state,
+            district: localData.district,
+            city: localData.city
+          }
+          setAddresses([...newAddresses])
+          onDataChange('addresses', [...newAddresses])
+          if (sameAsPermanent && index === 0) {
+            newAddresses[1] = { ...newAddresses[1], address_line: newAddresses[0].address_line, street: newAddresses[0].street, city: newAddresses[0].city, district: newAddresses[0].district, state: newAddresses[0].state, country: newAddresses[0].country, pincode: newAddresses[0].pincode }
+            setAddresses([...newAddresses])
+            onDataChange('addresses', [...newAddresses])
+          }
+        }
+
+        // Also try online API for more accurate/complete data
+        fetchPincodeData(value, index, newAddresses)
+      } else {
+        // Clear auto-filled fields when pincode is incomplete
         newAddresses[index] = {
           ...newAddresses[index],
           pincode: value,
-          state: locationData.state,
-          district: locationData.district,
-          city: locationData.city
+          state: '',
+          district: '',
+          city: ''
         }
       }
     }
@@ -135,9 +187,9 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
     const newVal = !sameAsPermanent
     setSameAsPermanent(newVal)
 
+    const newAddresses = [...addresses]
     if (newVal) {
       // Copy Present → Permanent
-      const newAddresses = [...addresses]
       newAddresses[1] = {
         ...newAddresses[1],
         address_line: newAddresses[0].address_line,
@@ -148,9 +200,21 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
         country: newAddresses[0].country,
         pincode: newAddresses[0].pincode
       }
-      setAddresses(newAddresses)
-      onDataChange('addresses', newAddresses)
+    } else {
+      // Uncheck: clear all Permanent fields
+      newAddresses[1] = {
+        ...newAddresses[1],
+        address_line: '',
+        street: '',
+        city: '',
+        district: '',
+        state: '',
+        country: 'India',
+        pincode: ''
+      }
     }
+    setAddresses(newAddresses)
+    onDataChange('addresses', newAddresses)
   }
 
   const inputClass = 'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
@@ -179,15 +243,28 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
           <label className="block text-sm font-semibold text-gray-700 mb-2">
             Pincode (6 digits) — Auto-fills State, District & City
           </label>
-          <input
-            type="text"
-            value={address.pincode || ''}
-            onChange={(e) => handleAddressChange(index, 'pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
-            maxLength="6"
-            placeholder="Enter 6-digit pincode"
-            disabled={isDisabled}
-            className={`${inputClass} ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''} ${errors[`address_${index}_pincode`] ? 'border-red-500' : ''}`}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={address.pincode || ''}
+              onChange={(e) => handleAddressChange(index, 'pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+              maxLength="6"
+              placeholder="Enter 6-digit pincode"
+              disabled={isDisabled}
+              className={`${inputClass} ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''} ${errors[`address_${index}_pincode`] ? 'border-red-500' : ''}`}
+            />
+            {pincodeLoading[index] && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <div className="w-5 h-5 border-2 border-amber-200 border-t-amber-600 rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+          {address.pincode?.length === 6 && address.state && !pincodeLoading[index] && (
+            <p className="text-xs text-green-600 mt-1">✓ {address.state}, {address.district}, {address.city}</p>
+          )}
+          {address.pincode?.length === 6 && !address.state && !pincodeLoading[index] && (
+            <p className="text-xs text-amber-600 mt-1">Pincode not found. Please check and try again.</p>
+          )}
           {errors[`address_${index}_pincode`] && (
             <p className="text-red-600 text-xs mt-1 flex items-center gap-1">
               <AlertCircle size={12} /> {errors[`address_${index}_pincode`]}
@@ -195,43 +272,37 @@ export default function AddressInformation({ isOpen, onToggle, data, onDataChang
           )}
         </div>
 
-        {/* State, District, City */}
+        {/* State, District, City — auto-filled from pincode */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">State</label>
-            <select
+            <input
+              type="text"
               value={address.state || ''}
-              onChange={(e) => handleAddressChange(index, 'state', e.target.value)}
-              disabled={isDisabled}
-              className={`${selectClass} ${isDisabled ? 'opacity-60' : ''}`}
-            >
-              <option value="">Select State</option>
-              {states.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+              readOnly
+              placeholder="Auto-filled from pincode"
+              className={`${inputClass} bg-gray-50 cursor-not-allowed ${isDisabled ? 'opacity-60' : ''}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">District</label>
-            <select
+            <input
+              type="text"
               value={address.district || ''}
-              onChange={(e) => handleAddressChange(index, 'district', e.target.value)}
-              disabled={isDisabled || !address.state}
-              className={`${selectClass} ${isDisabled ? 'opacity-60' : ''}`}
-            >
-              <option value="">Select District</option>
-              {getDistricts(address.state).map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+              readOnly
+              placeholder="Auto-filled from pincode"
+              className={`${inputClass} bg-gray-50 cursor-not-allowed ${isDisabled ? 'opacity-60' : ''}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
-            <select
+            <input
+              type="text"
               value={address.city || ''}
-              onChange={(e) => handleAddressChange(index, 'city', e.target.value)}
-              disabled={isDisabled || !address.district}
-              className={`${selectClass} ${isDisabled ? 'opacity-60' : ''}`}
-            >
-              <option value="">Select City</option>
-              {getCities(address.state, address.district).map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+              readOnly
+              placeholder="Auto-filled from pincode"
+              className={`${inputClass} bg-gray-50 cursor-not-allowed ${isDisabled ? 'opacity-60' : ''}`}
+            />
           </div>
         </div>
 

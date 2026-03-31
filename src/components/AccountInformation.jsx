@@ -213,7 +213,7 @@ export default function AccountInformation({ isOpen, onToggle, data, onDataChang
           {/* Aadhar and PAN */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Aadhar No (12 digits)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Aadhar No (12 digits) <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={data.aadhar_no || ''}
@@ -229,7 +229,7 @@ export default function AccountInformation({ isOpen, onToggle, data, onDataChang
               )}
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">PAN No</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">PAN No <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={data.pan_no || ''}

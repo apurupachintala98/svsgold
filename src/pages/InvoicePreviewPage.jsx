@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft, Download, Printer, AlertCircle, Loader
 } from 'lucide-react'
-import { applicationsAPI } from '../api/api'
+import { accountsAPI } from '../api/api'
 
 export default function InvoicePreviewPage() {
 
@@ -23,14 +23,19 @@ export default function InvoicePreviewPage() {
   const [previewData, setPreviewData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  /* ---- Fetch final-preview for customer details ---- */
+  /* ---- Fetch customer details from search API ---- */
   useEffect(() => {
     const fetchPreview = async () => {
       try {
-        const res = await applicationsAPI.getFinalPreview(mobile)
-        setPreviewData(res.data)
+        const res = await accountsAPI.searchCustomer(mobile)
+        const d = res.data || {}
+        setPreviewData({
+          account: d.customer || {},
+          addresses: d.addresses || [],
+          pledge_details: null
+        })
       } catch (e) {
-        console.error('Failed to fetch preview:', e)
+        console.error('Failed to fetch customer:', e)
       } finally {
         setLoading(false)
       }

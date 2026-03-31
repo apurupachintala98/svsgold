@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { Upload, AlertCircle, CheckCircle, Camera, CreditCard, FileText, Building2, Image, FolderOpen } from 'lucide-react'
 
 const DOCUMENT_SLOTS = [
-  { key: 'Photo', label: 'Photo', icon: Camera, description: 'Passport-size photo' },
-  { key: 'Aadhar', label: 'Aadhar', icon: CreditCard, description: 'Aadhar card (front & back)' },
-  { key: 'PAN', label: 'PAN', icon: FileText, description: 'PAN card copy' },
-  { key: 'Address Proof', label: 'Address Proof', icon: Image, description: 'Utility bill, Voter ID, etc.' },
-  { key: 'Bank Details', label: 'Bank Details', icon: Building2, description: 'Passbook / Cancelled cheque' },
-  { key: 'Others', label: 'Others', icon: FolderOpen, description: 'Any additional documents' },
+  { key: 'Photo', label: 'Photo', icon: Camera, description: 'Passport-size photo', required: true },
+  { key: 'Aadhar', label: 'Aadhar', icon: CreditCard, description: 'Aadhar card (front & back)', required: true },
+  { key: 'PAN', label: 'PAN', icon: FileText, description: 'PAN card copy', required: true },
+  { key: 'Address Proof', label: 'Address Proof', icon: Image, description: 'Utility bill, Voter ID, etc.', required: true },
+  { key: 'Bank Details', label: 'Bank Details', icon: Building2, description: 'Passbook / Cancelled cheque', required: true },
+  { key: 'Others', label: 'Others', icon: FolderOpen, description: 'Any additional documents', required: false },
 ]
 
 export default function Documents({ isOpen, onToggle, data, onDataChange }) {
@@ -120,7 +120,10 @@ export default function Documents({ isOpen, onToggle, data, onDataChange }) {
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-gray-800 text-sm">{slot.label}</h4>
+                    <h4 className="font-semibold text-gray-800 text-sm">
+                      {slot.label}
+                      {slot.required && <span className="text-red-500 ml-1">*</span>}
+                    </h4>
                     <p className="text-xs text-gray-400">{slot.description}</p>
                   </div>
                 </div>

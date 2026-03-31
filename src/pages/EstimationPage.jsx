@@ -4,7 +4,7 @@ import {
   Loader, Plus, Trash2, AlertCircle, Save, Download,
   FileText, CreditCard, Calculator, LogOut, Menu, X, Home
 } from 'lucide-react'
-import { applicationsAPI } from '../api/api'
+import { applicationsAPI, accountsAPI } from '../api/api'
 import PdfGenerator from '../utils/PdfGenerator'
 
 export default function EstimationPage() {
@@ -64,12 +64,13 @@ export default function EstimationPage() {
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i))
 
   const calcItem = (item) => {
+    const qty = parseFloat(item.quantity) || 1
     // net_gold_weight = gross_weight - stone_weight
     const netWeight = Math.round(((parseFloat(item.gross_weight_gms) || 0) - (parseFloat(item.stone_weight_gms) || 0)) * 100) / 100
     // pure_gold_weight = net_gold_weight * (purity / 100)
     const pureGoldWeight = Math.round((netWeight * (parseFloat(item.purity_percentage) || 0) / 100) * 100) / 100
-    // gross_amount = pure_gold_weight * gold_rate_per_gm
-    const grossAmount = Math.round((pureGoldWeight * (parseFloat(item.gold_rate_per_gm) || 0)) * 100) / 100
+    // gross_amount = pure_gold_weight * gold_rate_per_gm * quantity
+    const grossAmount = Math.round((pureGoldWeight * (parseFloat(item.gold_rate_per_gm) || 0) * qty) * 100) / 100
     // net_amount = gross_amount - (gross_amount * deduction / 100)
     const netAmount = Math.round((grossAmount - (grossAmount * (parseFloat(item.deduction_percentage) || 0) / 100)) * 100) / 100
     return { netWeight, pureGoldWeight, grossAmount, netAmount }
@@ -81,7 +82,7 @@ export default function EstimationPage() {
   const appType = application?.application?.application_type || ''
   const isPledgeRelease = appType === 'PLEDGE_RELEASE'
   const totalDue = parseFloat(application?.pledge_details?.total_due) || 0
-  const finalAmount = isPledgeRelease ? Math.max(0, grandTotal - totalDue) : grandTotal
+  const finalAmount = isPledgeRelease ? Math.round((grandTotal - totalDue) * 100) / 100 : grandTotal
 
   /* ---- Validate ---- */
   const validate = () => {
@@ -112,13 +113,32 @@ export default function EstimationPage() {
       }
 
       setSaved(true); setGeneratingPdf(true)
-      const res = await applicationsAPI.getFinalPreview(loggedInMobile)
-      const preview = res.data; setPreviewData(preview)
+
+      // Get all data from searchCustomer
+      let preview = {}
+      try {
+        const res = await accountsAPI.searchCustomer(loggedInMobile)
+        const d = res.data || {}
+        const appId = application?.application?.application_id
+        const allPledges = d.pledge_details || []
+        const appPledge = appId ? allPledges.find(p => p.application_id === appId) : allPledges[0]
+
+        preview = {
+          account: d.customer || {},
+          addresses: d.addresses || [],
+          documents: d.documents || [],
+          pledge_details: appPledge || null,
+          application: application?.application || {}
+        }
+      } catch {}
+      setPreviewData(preview)
+
+      const custName = preview?.account?.name || [preview?.account?.first_name, preview?.account?.last_name].filter(Boolean).join(' ') || preview?.pledge_details?.pledger_name || ''
 
       const gen = new PdfGenerator()
       const pdfBytes = await gen.generateEstimationPdf({
         estimation_no: estNo,
-        name: preview?.account?.name || [preview?.account?.first_name, preview?.account?.last_name].filter(Boolean).join(' ') || preview?.pledge_details?.pledger_name || '',
+        name: custName,
         mobile: loggedInMobile,
         application_no: preview?.application?.application_no || '',
         items: items.map(it => { const c = calcItem(it); return { item_name: it.item_name, gross_weight: it.gross_weight_gms, net_weight: c.netWeight, pure_gold_weight: c.pureGoldWeight, gold_rate: it.gold_rate_per_gm, net_amount: c.netAmount.toFixed(2) } })
@@ -202,6 +222,12 @@ export default function EstimationPage() {
             <p className="text-gray-500 text-sm mt-1">{application?.application?.application_no || 'Application'} • Customer: {loggedInMobile}</p>
           </div>
           <div className="flex items-center gap-4">
+            {!saved && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-100">
+                <Calculator size={18} className="text-amber-600" />
+                <span className="text-sm font-semibold text-gray-700">Total: ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
             <button onClick={() => navigate('/dashboard')} className="p-3 rounded-lg hover:bg-gray-100 transition-colors"><Home size={20} className="text-gray-600" /></button>
             <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium"><LogOut size={18} /> Logout</button>
           </div>
@@ -386,7 +412,7 @@ export default function EstimationPage() {
               return (
               <div className="space-y-6">
                 {/* Success banner */}
-                <div className="flex items-start gap-3 p-4 bg-green-50 border-2 border-green-200 rounded-xl mb-2">
+                <div className="flex items-start gap-3 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0"><Check size={18} className="text-white" /></div>
                   <div>
                     <p className="text-sm text-green-800 font-medium">Estimation Saved Successfully</p>
@@ -540,7 +566,8 @@ export default function EstimationPage() {
                   </div>
                 </div>
 
-                   <div className="flex justify-center gap-4">
+                {/* Action Buttons */}
+                <div className="flex justify-center gap-4">
                   <button
                     onClick={() => {
                       const el = document.getElementById('estimation-print-area')

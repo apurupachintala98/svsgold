@@ -91,16 +91,16 @@ export const validateCreateAccountForm = (formData, addresses, bankAccounts, doc
     errors.email = 'Invalid email format'
   }
   
-  // === Optional field validation (only if a value is provided) ===
-  if (formData.phone && !validatePhone(formData.phone)) {
-    errors.phone = 'Phone must be 10 digits'
-  }
-  
-  if (formData.aadhar_no && !validateAadhar(formData.aadhar_no)) {
+  // === Aadhar & PAN (mandatory) ===
+  if (!formData.aadhar_no?.trim()) {
+    errors.aadhar_no = 'Aadhar number is required'
+  } else if (!validateAadhar(formData.aadhar_no)) {
     errors.aadhar_no = 'Aadhar must be 12 digits'
   }
   
-  if (formData.pan_no && !validatePAN(formData.pan_no)) {
+  if (!formData.pan_no?.trim()) {
+    errors.pan_no = 'PAN number is required'
+  } else if (!validatePAN(formData.pan_no)) {
     errors.pan_no = 'PAN must be in format: ABCDE1234F'
   }
   
@@ -131,28 +131,48 @@ export const validateCreateAccountForm = (formData, addresses, bankAccounts, doc
     }
   })
   
-  // === Bank Account validation — only if bank accounts were added ===
+  // === Bank Account validation ===
+  // Primary bank (index 0) is mandatory; additional banks only validate if partially filled
+  if (!bankAccounts || bankAccounts.length === 0) {
+    errors.bank_required = 'At least one bank account is required'
+  }
   bankAccounts.forEach((bank, index) => {
+    const isPrimary = index === 0
+    const hasAnyContent = bank.bank_name?.trim() || bank.account_number?.trim() || bank.ifsc_code?.trim() || bank.account_holder_name?.trim()
+
+    // Skip validation for optional banks that are completely empty
+    if (!isPrimary && !hasAnyContent) return
+
     if (!bank.bank_name?.trim()) {
-      errors[`bank_${index}_name`] = 'Bank name is required'
+      errors[`bank_${index}_name`] = isPrimary ? 'Primary bank name is required' : 'Bank name is required'
     }
     
     if (!bank.account_number?.trim()) {
-      errors[`bank_${index}_account_number`] = 'Account number is required'
+      errors[`bank_${index}_account_number`] = isPrimary ? 'Primary account number is required' : 'Account number is required'
     } else if (!validateAccountNumber(bank.account_number)) {
       errors[`bank_${index}_account_number`] = 'Account number must be 9-18 digits'
     }
     
     if (!bank.ifsc_code?.trim()) {
-      errors[`bank_${index}_ifsc_code`] = 'IFSC code is required'
+      errors[`bank_${index}_ifsc_code`] = isPrimary ? 'Primary IFSC code is required' : 'IFSC code is required'
     } else if (!validateIFSC(bank.ifsc_code)) {
       errors[`bank_${index}_ifsc_code`] = 'IFSC format: ABCD0123456'
     }
     
     if (!bank.account_holder_name?.trim()) {
-      errors[`bank_${index}_holder`] = 'Account holder name is required'
+      errors[`bank_${index}_holder`] = isPrimary ? 'Primary account holder name is required' : 'Account holder name is required'
     }
   })
-    
+  
+  // === Documents — All required except 'Others' ===
+  const requiredDocTypes = ['Photo', 'Aadhar', 'PAN', 'Address Proof', 'Bank Details']
+  const docs = documents || []
+  requiredDocTypes.forEach(docType => {
+    const doc = docs.find(d => d.document_type === docType)
+    if (!doc || !doc.file_path) {
+      errors[`doc_${docType}`] = `${docType} document is required`
+    }
+  })
+  
   return { errors, isValid: Object.keys(errors).length === 0 }
 }

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Eye, AlertCircle, Loader, Edit, ChevronLeft,
   FileText, Calendar, MapPin, User, Building2,
-  Hash, Clock, FileDown
+  Hash, Clock, FileDown, CreditCard, Calculator
 } from 'lucide-react'
 import ApplicationForm from './ApplicationForm'
 import ApplicationPreview from './ApplicationPreview'
-import { applicationsAPI } from '../api/api'
+import { applicationsAPI, accountsAPI } from '../api/api'
 
 export default function ApplicationsView({
   userIdentifier,
@@ -15,34 +16,47 @@ export default function ApplicationsView({
   error,
   onApplicationsUpdate
 }) {
+  const navigate = useNavigate()
 
   const [selectedApplication, setSelectedApplication] = useState(null)
   const [viewMode, setViewMode] = useState(null)
   const [detailData, setDetailData] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [selectedPdf, setSelectedPdf] = useState(null)
 
   // Data from final-preview (single source of truth)
   const [previewData, setPreviewData] = useState(null)
   const [checkingCompletion, setCheckingCompletion] = useState(true)
 
   /* ================================================================ */
-  /*  FETCH FINAL-PREVIEW ON MOUNT (single API, all data)             */
+  /*  FETCH DATA ON MOUNT — searchCustomer only (has everything)      */
   /* ================================================================ */
   useEffect(() => {
     if (!userIdentifier) return
 
     const fetchPreview = async () => {
       setCheckingCompletion(true)
+      let custData = {}
       try {
-        const res = await applicationsAPI.getFinalPreview(userIdentifier)
-        setPreviewData(res.data)
-      } catch (e) {
-        console.log('Final preview not available yet')
-        setPreviewData(null)
-      } finally {
-        setCheckingCompletion(false)
+        const res = await accountsAPI.searchCustomer(userIdentifier)
+        custData = res.data || {}
+      } catch {}
+
+      const merged = {
+        account: custData.customer || {},
+        addresses: custData.addresses || [],
+        documents: custData.documents || [],
+        bank_account: custData.bank_accounts?.[0] || null,
+        invoices: custData.invoices || [],
+        estimations: custData.estimations || [],
+        pledge_details: custData.pledge_details || [],
+        ornaments: custData.ornaments || [],
+        application: null
       }
+
+      setPreviewData(Object.keys(custData).length > 0 ? merged : null)
+      setCheckingCompletion(false)
     }
 
     fetchPreview()
@@ -51,34 +65,38 @@ export default function ApplicationsView({
   /* ================================================================ */
   /*  EXTRACT DATA FROM PREVIEW                                       */
   /* ================================================================ */
-  const previewPledge = previewData?.pledge_details || null
-  const previewOrnaments = previewData?.ornaments || []
+  const allPledges = previewData?.pledge_details || []
+  const allOrnaments = previewData?.ornaments || []
 
-  const hasPledge = !!(previewPledge?.pledger_name)
-  const hasOrnaments = Array.isArray(previewOrnaments) && previewOrnaments.length > 0
+  // Per-app helpers
+  const getAppPledge = (appId) => (Array.isArray(allPledges) ? allPledges : []).find(p => p.application_id === appId)
+  const getAppOrnaments = (appId) => (Array.isArray(allOrnaments) ? allOrnaments : []).filter(o => o.application_id === appId)
 
   /* ================================================================ */
-  /*  TYPE-AWARE COMPLETION CHECK                                     */
+  /*  TYPE-AWARE COMPLETION CHECK (per application_id)                */
   /* ================================================================ */
   const isAppComplete = (app) => {
-    // While still loading preview, trust the app's own status from the API
     if (!previewData) {
       const status = (app?.status || '').toUpperCase()
       return ['SUBMITTED', 'APPROVED', 'COMPLETED'].includes(status)
     }
+    const appId = app?.application_id
     const type = app?.application_type || ''
-    if (type === 'DIRECT_BUYING') return hasOrnaments
-    return hasPledge && hasOrnaments
+    const appHasOrn = getAppOrnaments(appId).length > 0
+    if (type === 'DIRECT_BUYING') return appHasOrn
+    const appHasPledge = !!getAppPledge(appId)
+    return appHasPledge && appHasOrn
   }
 
   const getMissingSteps = (app) => {
+    const appId = app?.application_id
     const type = app?.application_type || ''
     const missing = []
     if (type === 'DIRECT_BUYING') {
-      if (!hasOrnaments) missing.push('Ornaments')
+      if (getAppOrnaments(appId).length === 0) missing.push('Ornaments')
     } else {
-      if (!hasPledge) missing.push('Pledge details')
-      if (!hasOrnaments) missing.push('Ornaments')
+      if (!getAppPledge(appId)) missing.push('Pledge details')
+      if (getAppOrnaments(appId).length === 0) missing.push('Ornaments')
     }
     return missing
   }
@@ -106,7 +124,7 @@ export default function ApplicationsView({
   }
 
   /* ================================================================ */
-  /*  VIEW APPLICATION DETAILS — always fetch fresh data              */
+  /*  VIEW APPLICATION DETAILS — fetch from search API by app_id      */
   /* ================================================================ */
   const handleViewApplication = async (app) => {
     setSelectedApplication(app)
@@ -114,26 +132,52 @@ export default function ApplicationsView({
     setDetailLoading(true)
     setDetailError('')
 
+    const appId = app.application_id
+    let custData = {}
+
     try {
-      // Always fetch fresh data to ensure we have the latest
-      const res = await applicationsAPI.getFinalPreview(userIdentifier)
-      const data = res.data
-      setPreviewData(data)
-      setDetailData({
-        application: app,
-        pledge_details: data?.pledge_details || null,
-        ornaments: data?.ornaments || []
-      })
-    } catch (err) {
-      console.error('Error fetching details:', err)
-      setDetailData({
-        application: app,
-        pledge_details: null,
-        ornaments: []
-      })
-    } finally {
-      setDetailLoading(false)
+      const res = await accountsAPI.searchCustomer(userIdentifier)
+      custData = res.data || {}
+    } catch {}
+
+    // Match by application_id
+    const allPledges = custData.pledge_details || []
+    const appPledge = allPledges.find(p => p.application_id === appId) || null
+
+    const allOrnaments = custData.ornaments || []
+    const appOrnaments = allOrnaments.filter(o => o.application_id === appId)
+
+    const allEstimations = custData.estimations || []
+    const appEstimation = allEstimations.find(e => e.application_id === appId) || null
+
+    const allInvoices = custData.invoices || []
+    const appInvoice = allInvoices.find(inv => inv.application_id === appId) || null
+
+    const mergedPreview = {
+      account: custData.customer || {},
+      addresses: custData.addresses || [],
+      documents: custData.documents || [],
+      bank_account: custData.bank_accounts?.[0] || null,
+      invoices: allInvoices,
+      pledge_details: allPledges,
+      ornaments: allOrnaments,
+      estimation: appEstimation,
+      application: app,
+      _appPledge: appPledge,
+      _appOrnaments: appOrnaments,
+      _appEstimation: appEstimation,
+      _appInvoice: appInvoice
     }
+    setPreviewData(mergedPreview)
+
+    setDetailData({
+      application: app,
+      pledge_details: appPledge,
+      ornaments: appOrnaments,
+      estimation: appEstimation,
+      invoice: appInvoice
+    })
+    setDetailLoading(false)
   }
 
   const handleEditApplication = (app) => {
@@ -146,6 +190,7 @@ export default function ApplicationsView({
     setSelectedApplication(null)
     setDetailData(null)
     setDetailError('')
+    setSelectedPdf(null)
   }
 
   const handleApplicationCreated = (updatedApplication) => {
@@ -241,8 +286,8 @@ export default function ApplicationsView({
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-amber-100">
               <div className="px-8 py-5 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, #fdf8f0, #f0d5a8)' }}>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{detailData.application.application_no}</h2>
-                  <p className="text-amber-700 text-sm mt-1">{detailData.application.application_type?.replace('_', ' ')}</p>
+                  <h2 className="text-xl font-bold text-gray-900">{detailData?.application?.application_no || '—'}</h2>
+                  <p className="text-amber-700 text-sm mt-1">{detailData?.application?.application_type?.replace('_', ' ') || ''}</p>
                 </div>
                 <span className={`px-4 py-1.5 rounded-full text-xs font-bold border ${getStatusStyle(displayStatus)}`}>
                   {displayStatus}
@@ -250,10 +295,10 @@ export default function ApplicationsView({
               </div>
               <div className="p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <DetailField icon={<FileText size={16} className="text-amber-600" />} label="Type" value={detailData.application.application_type?.replace('_', ' ') || '—'} />
-                  <DetailField icon={<Calendar size={16} className="text-amber-600" />} label="Date" value={detailData.application.application_date || '—'} />
-                  <DetailField icon={<MapPin size={16} className="text-amber-600" />} label="Place" value={detailData.application.place || '—'} />
-                  <DetailField icon={<Hash size={16} className="text-amber-600" />} label="Mobile" value={previewData.account.mobile || '—'} />
+                  <DetailField icon={<FileText size={16} className="text-amber-600" />} label="Type" value={detailData?.application?.application_type?.replace('_', ' ') || '—'} />
+                  <DetailField icon={<Calendar size={16} className="text-amber-600" />} label="Date" value={detailData?.application?.application_date || '—'} />
+                  <DetailField icon={<MapPin size={16} className="text-amber-600" />} label="Branch" value={detailData?.application?.branch || '—'} />
+                  <DetailField icon={<Hash size={16} className="text-amber-600" />} label="Mobile" value={detailData?.application?.mobile || userIdentifier || '—'} />
                   <DetailField icon={<Clock size={16} className="text-amber-600" />} label="Status" value={displayStatus} />
                 </div>
               </div>
@@ -272,12 +317,14 @@ export default function ApplicationsView({
                       <DetailField icon={<Building2 size={16} className="text-amber-600" />} label="Financier" value={detailData.pledge_details.financier_name || '—'} />
                       <DetailField icon={<Building2 size={16} className="text-amber-600" />} label="Branch" value={detailData.pledge_details.branch_name || '—'} />
                       <DetailField icon={<Hash size={16} className="text-amber-600" />} label="Gold Loan A/C" value={detailData.pledge_details.gold_loan_account_no || '—'} />
+                     
                       <DetailField icon={<MapPin size={16} className="text-amber-600" />} label="Address" value={detailData.pledge_details.pledger_address || '—'} />
                     </div>
-                    <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <AmountCard label="Principal" amount={detailData.pledge_details.principal_amount} />
                       <AmountCard label="Interest" amount={detailData.pledge_details.interest_amount} />
                       <AmountCard label="Total Due" amount={detailData.pledge_details.total_due} highlight />
+                     
                     </div>
                   </div>
                 </div>
@@ -317,19 +364,104 @@ export default function ApplicationsView({
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="flex justify-center gap-4 pt-4">
-              {isDraft && !complete ? (
-                <button onClick={() => handleEditApplication(selectedApplication)} className="flex items-center gap-3 px-8 py-3.5 text-white font-bold rounded-xl shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)' }}>
-                  <Edit size={20} /> Edit & Complete All Steps
-                </button>
-              ) : (
-                <button onClick={() => setViewMode('pdf')} className="flex items-center gap-3 px-8 py-3.5 text-white font-bold rounded-xl shadow-lg transition-all" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)', boxShadow: '0 4px 14px 0 rgba(163, 110, 36, 0.3)' }}>
-                  <FileDown size={20} /> View / Download Application PDF
-                </button>
-              )}
+            {/* Action Buttons — progress-aware (matched by application_id) */}
+            <div className="space-y-4 pt-4">
+              {(() => {
+                const appId = selectedApplication?.application_id
+                const hasPledge = !!detailData?.pledge_details?.pledger_name
+                const hasOrn = detailData?.ornaments?.length > 0
+
+                // Estimation matched by application_id from search API
+                const appEst = previewData?._appEstimation || detailData?.estimation
+                const hasEst = !!appEst?.estimation_id || (appEst?.items?.length > 0)
+                const estItems = appEst?.items || detailData?.estimation?.items || []
+
+                // Invoice matched by application_id from search API
+                const appInv = previewData?._appInvoice || detailData?.invoice
+                const hasInvoice = !!appInv?.invoice_no || !!appInv?.invoice_id
+                const hasInvoiceItems = !!appInv?.has_items || !!appInv?.items_count || (appInv?.invoice_items?.length > 0)
+                const hasSettlement = !!appInv?.settlement_id || !!appInv?.payment_mode || !!appInv?.settlement_status
+
+                const paymentComplete = hasInvoice && hasSettlement
+                const isSubmitted = ['SUBMITTED','APPROVED','COMPLETED'].includes((selectedApplication?.status || '').toUpperCase())
+
+                const completedPdfs = []
+                if (hasPledge && hasOrn) completedPdfs.push({ label: 'Application Form', mode: 'pdf' })
+                if (hasEst) completedPdfs.push({ label: 'Estimation', mode: 'estimation-pdf' })
+                if (paymentComplete || isSubmitted) completedPdfs.push({ label: 'Payment Voucher', mode: 'payment-pdf' })
+
+                let nextAction = null
+                if (!isSubmitted) {
+                  const isPledgeType = selectedApplication?.application_type === 'PLEDGE_RELEASE'
+                  if (isPledgeType && !hasPledge) {
+                    nextAction = { label: 'Continue — Pledge Details', action: () => handleEditApplication(selectedApplication) }
+                  } else if (!hasOrn) {
+                    nextAction = { label: 'Continue — Add Ornaments', action: () => handleEditApplication(selectedApplication) }
+                  } else if (!hasEst) {
+                    nextAction = { label: 'Continue — Estimation', action: () => navigate('/estimation', { state: { application: previewData } }) }
+                  } else if (!paymentComplete) {
+                    let paymentStep = 1
+                    if (hasInvoice && !hasInvoiceItems) paymentStep = 2
+                    else if (hasInvoice && hasInvoiceItems && !hasSettlement) paymentStep = 3
+
+                    nextAction = {
+                      label: paymentStep === 1 ? 'Continue — Create Invoice' : paymentStep === 2 ? 'Continue — Invoice Items' : 'Continue — Settlement',
+                      action: () => {
+                        navigate('/payment', {
+                          state: {
+                            application: previewData,
+                            applicationId: appId,
+                            estimation_no: appEst?.estimation_no || '',
+                            items: estItems,
+                            grandTotal: appEst?.summary?.total_net_amount || appEst?.total_net_amount || 0
+                          }
+                        })
+                      }
+                    }
+                  }
+                }
+
+                return (
+                  <>
+                    {completedPdfs.length > 0 && (
+                      <div className="flex justify-center gap-3 flex-wrap">
+                        {completedPdfs.map(p => (
+                          <button key={p.mode} onClick={() => setSelectedPdf(selectedPdf === p.mode ? null : p.mode)} className={`flex items-center gap-2 px-5 py-2.5 font-semibold rounded-xl shadow text-sm transition-all ${selectedPdf === p.mode ? 'ring-2 ring-offset-2 ring-amber-400' : ''}`}
+                            style={{ background: p.mode === 'pdf' ? 'linear-gradient(135deg, #c9943a, #a36e24)' : p.mode === 'estimation-pdf' ? 'linear-gradient(135deg, #3a7ab5, #2c5f8a)' : 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff' }}>
+                            <FileDown size={16} /> {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {nextAction && (
+                      <div className="flex justify-center">
+                        <button onClick={nextAction.action} className="flex items-center gap-2 px-8 py-3 text-white font-semibold rounded-xl shadow-lg text-sm" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)' }}>
+                          <Edit size={16} /> {nextAction.label}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
-          </div>
+
+            {/* Inline PDF Preview */}
+            {selectedPdf === 'pdf' && (
+              <div className="mt-6">
+                <ApplicationPreview application={selectedApplication} userIdentifier={userIdentifier} onBack={() => setSelectedPdf(null)} />
+              </div>
+            )}
+            {selectedPdf === 'estimation-pdf' && (
+              <div className="mt-6">
+                <EstimationPdfView userIdentifier={userIdentifier} />
+              </div>
+            )}
+            {selectedPdf === 'payment-pdf' && (
+              <div className="mt-6">
+                <PaymentPdfView userIdentifier={userIdentifier} />
+              </div>
+            )}
+            </div>
         )}
       </div>
     )
@@ -339,7 +471,7 @@ export default function ApplicationsView({
   /*  PDF PREVIEW                                                     */
   /* ================================================================ */
   if (viewMode === 'pdf' && selectedApplication) {
-    return <ApplicationPreview application={selectedApplication} userIdentifier={userIdentifier} onBack={handleBackToList} />
+    return <ApplicationPreview application={selectedApplication} userIdentifier={userIdentifier} onBack={() => { setViewMode('view'); setSelectedPdf(null) }} />
   }
 
   /* ================================================================ */
@@ -390,14 +522,9 @@ export default function ApplicationsView({
                   <button onClick={() => handleViewApplication(app)} className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
                     <Eye size={16} /> View
                   </button>
-                  {isAccepted && (
-                    <button onClick={() => { setSelectedApplication(app); setViewMode('pdf') }} className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
-                      <FileDown size={16} /> PDF
-                    </button>
-                  )}
                   {isDraft && (
-                    <button onClick={() => handleEditApplication(app)} className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-600 font-semibold rounded-xl hover:bg-amber-100 transition-all">
-                      <Edit size={16} /> Edit
+                    <button onClick={() => handleEditApplication(app)} className="flex items-center gap-2 px-5 py-2.5 text-white font-semibold rounded-xl transition-all text-sm" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)' }}>
+                      <Edit size={16} /> Continue
                     </button>
                   )}
                 </div>
@@ -429,6 +556,379 @@ function AmountCard({ label, amount, highlight = false, suffix = '' }) {
     <div className={`rounded-xl p-4 text-center ${highlight ? 'border-2 border-amber-300' : 'bg-gray-50 border border-gray-100'}`} style={highlight ? { background: 'linear-gradient(135deg, #fdf8f0, #f0d5a8)' } : {}}>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
       <p className={`text-lg font-bold mt-1 ${highlight ? 'text-amber-800' : 'text-gray-800'}`}>{formatted}</p>
+    </div>
+  )
+}
+/* ================================================================ */
+/*  ESTIMATION PDF VIEW — fetches data and shows estimation preview  */
+/* ================================================================ */
+function EstimationPdfView({ userIdentifier }) {
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await accountsAPI.searchCustomer(userIdentifier)
+        const d = r.data || {}
+        const ests = d.estimations || []
+        const latest = ests.length > 0 ? ests[ests.length - 1] : null
+        const allPledges = d.pledge_details || []
+        const appPledge = latest?.application_id ? allPledges.find(p => p.application_id === latest.application_id) : allPledges[0]
+
+        setData({
+          account: d.customer || {},
+          addresses: d.addresses || [],
+          pledge_details: appPledge || null,
+          estimation: latest ? { ...latest, items: latest.items || [], summary: { total_net_amount: latest.total_net_amount, estimation_no: latest.estimation_no } } : {},
+          application: (d.applications || []).find(a => a.application_id === latest?.application_id) || {}
+        })
+      } catch {} finally { setLoading(false) }
+    })()
+  }, [userIdentifier])
+
+  if (loading) return <div className="text-center py-20"><Loader size={36} className="animate-spin mx-auto text-amber-600" /><p className="text-gray-600 mt-4">Loading Estimation...</p></div>
+
+  const acc = data?.account || {}
+  const addrs = data?.addresses || []
+  const pledge = data?.pledge_details || {}
+  const est = data?.estimation || {}
+  const items = est.items || []
+  const name = [acc.first_name, acc.last_name].filter(Boolean).join(' ')
+  const present = addrs.find(a => /present|current/i.test(a.address_type)) || addrs[0] || {}
+  const perm = addrs.find(a => /permanent/i.test(a.address_type)) || addrs[1] || present
+  const fA = (a) => [a?.address_line, a?.street, a?.city, a?.state, a?.pincode].filter(Boolean).join(', ')
+
+  const totalNet = est.summary?.total_net_amount || items.reduce((s, it) => s + (parseFloat(it.net_amount) || 0), 0)
+  const totalDue = parseFloat(pledge.total_due) || 0
+  const isPR = data?.application?.application_type === 'PLEDGE_RELEASE'
+  const finalAmount = isPR ? totalNet - totalDue : totalNet
+
+  const numToWords = (n) => {
+    if (!n || n === 0) return 'Zero'
+    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
+    const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']
+    const num = Math.floor(Math.abs(n))
+    if (num < 20) return a[num]
+    if (num < 100) return b[Math.floor(num/10)] + (num%10 ? ' ' + a[num%10] : '')
+    if (num < 1000) return a[Math.floor(num/100)] + ' Hundred' + (num%100 ? ' and ' + numToWords(num%100) : '')
+    if (num < 100000) return numToWords(Math.floor(num/1000)) + ' Thousand' + (num%1000 ? ' ' + numToWords(num%1000) : '')
+    if (num < 10000000) return numToWords(Math.floor(num/100000)) + ' Lakh' + (num%100000 ? ' ' + numToWords(num%100000) : '')
+    return numToWords(Math.floor(num/10000000)) + ' Crore' + (num%10000000 ? ' ' + numToWords(num%10000000) : '')
+  }
+
+  const blue = '#2c5f8a'; const cb = '1px solid #6a9ec7'
+  const lb = { border: cb, padding: '5px 8px', fontWeight: 'bold', background: '#f0f6fb', fontSize: '10px' }
+  const vl = { border: cb, padding: '5px 8px', fontSize: '10px' }
+
+  const handlePrint = () => {
+    const el = document.getElementById('est-pdf-view')
+    if (!el) return
+    const w = window.open('','_blank')
+    w.document.write('<html><head><title>Estimation</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Times New Roman",serif}@media print{@page{margin:10mm}}</style></head><body>' + el.innerHTML + '</body></html>')
+    w.document.close(); setTimeout(() => { w.print(); w.close() }, 400)
+  }
+
+  if (items.length === 0) return <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-6 text-center"><p className="text-amber-700 font-medium">No estimation data found.</p></div>
+
+  return (
+    <div className="space-y-4">
+      <div id="est-pdf-view" style={{ fontFamily: "'Times New Roman',Georgia,serif", maxWidth: '750px', margin: '0 auto', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ color: '#fff', lineHeight: '1.5' }}>
+            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Himayathnagar</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>98855 88220</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
+          </div>
+          <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>ESTIMATION COPY</div></div>
+          <div style={{ width: '100px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><img src="/svslogo-white.png" alt="SVS Gold" style={{ maxHeight: '65px', maxWidth: '95px', objectFit: 'contain' }} /></div>
+        </div>
+
+        <div style={{ padding: '20px 28px' }}>
+          {/* Customer Details */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px' }}><tbody>
+            <tr><td style={lb} width="130">Estimation No.</td><td style={vl}>{est.estimation_no || est.summary?.estimation_no || '—'}</td><td style={lb} width="60">Date</td><td style={vl} width="120">{new Date().toLocaleDateString('en-IN')}</td></tr>
+            <tr><td style={lb}>Name</td><td style={vl} colSpan={3}>{name}</td></tr>
+            <tr><td style={lb}>Email ID</td><td style={vl}>{acc.email || ''}</td><td style={lb}>Mobile No.</td><td style={vl}>{acc.mobile || userIdentifier}</td></tr>
+            <tr><td style={lb}>Present Address</td><td style={vl} colSpan={3}>{fA(present)}</td></tr>
+            <tr><td style={lb}>Permanent Address</td><td style={vl} colSpan={3}>{fA(perm)}</td></tr>
+          </tbody></table>
+
+          {/* Items Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px', marginBottom: '12px' }}>
+            <thead><tr style={{ background: '#f0f6fb' }}>
+              {['S.\nNo.','Item','Qty.','Gross\nWeight\nIn Gms','Stone\nWeight\nIn Carats','Net\nWeight\nIn Gms','Gold Rate\nPer Gm.','Purity\nIn %','Gross\nAmount','Deductions','Net\nAmount','Item\nPictures'].map((h,i) => (
+                <th key={i} style={{ border: cb, padding: '6px 4px', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'pre-line', verticalAlign: 'bottom', lineHeight: '1.3' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={i}>
+                  <td style={{ ...vl, textAlign: 'center' }}>{i+1}</td>
+                  <td style={vl}>{it.item_name}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.quantity}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.gross_weight_gms}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.stone_weight_gms || 0}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.net_weight || (parseFloat(it.gross_weight_gms||0) - parseFloat(it.stone_weight_gms||0)).toFixed(2)}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.gold_rate_per_gm}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.purity_percentage}%</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>₹{Number(it.gross_amount || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.deduction_percentage || 0}%</td>
+                  <td style={{ ...vl, textAlign: 'center', fontWeight: 'bold' }}>₹{Number(it.net_amount || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ ...vl, textAlign: 'center', padding: '2px' }}></td>
+                </tr>
+              ))}
+              {Array.from({ length: Math.max(0, 5 - items.length) }).map((_, i) => (
+                <tr key={`e${i}`}>{Array.from({length:12}).map((_,j) => <td key={j} style={{ ...vl, height: '24px' }}>&nbsp;</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Total Net Amount */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '6px' }}><tbody>
+            <tr><td style={lb} width="150">Total Net Amount</td><td style={{ ...vl, fontWeight: 'bold', fontSize: '13px' }}>₹{Number(totalNet).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+            {isPR && totalDue > 0 && (<>
+              <tr><td style={{ ...lb, color: '#dc2626' }}>Less: Pledge Due</td><td style={{ ...vl, color: '#dc2626', fontWeight: 'bold' }}>- ₹{totalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+              <tr><td style={{ ...lb, background: '#e8f5e9' }}>Payable to Customer</td><td style={{ ...vl, fontWeight: 'bold', fontSize: '13px', color: '#16a34a' }}>₹{finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+            </>)}
+            <tr><td style={lb}>Amount In Words</td><td style={{ ...vl, fontStyle: 'italic' }}>{numToWords(Math.round(Math.abs(isPR ? finalAmount : totalNet)))} Rupees Only</td></tr>
+          </tbody></table>
+
+          {/* Consent for Melting */}
+          <div style={{ marginTop: '16px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: blue, marginBottom: '6px' }}>Consent for Melting:</div>
+            <div style={{ fontSize: '10px', lineHeight: '1.7', textAlign: 'justify' }}>
+              I <strong>{name || '______'}</strong>, hereby grant <strong>SVS Gold Private Limited (' SVS Gold')</strong> and its representative's permission and accord my consent to remove precious/semi - precious stones, gems, dust, or any material other than gold from ornaments before melting. Upon melting, I will accept to actual weight and purity arrived after melting of my ornaments. I agree to bear all the losses in terms of purity and weight which occurs from the melting process and/or stones and other materials removal. I agree to settle the differential amount based on the current gold rate to SVS Gold before and after melting.
+            </div>
+          </div>
+
+          {/* Terms & Conditions */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: blue, marginBottom: '6px' }}>Terms & Conditions</div>
+            <ol style={{ fontSize: '9.5px', lineHeight: '1.7', paddingLeft: '16px', margin: 0 }}>
+              <li style={{ marginBottom: '3px' }}>SVS Gold is not responsible for any loss after melting such as weight loss or purity loss. The customer will not have any claim for the weight loss and purity loss.</li>
+              <li style={{ marginBottom: '3px' }}>After melting, if the gold is rejected by the SVS Gold due to inadequate purity or customer rejects the gold due to any reason, the melted gold (after melting) will be returned to the customer. The Customer agrees and undertakes not to claim gold in its earlier form, shape size and weight as it was prior to melting of gold ornament and agrees that SVS Gold shall not be held liable to restore gold into original form, size and weight as it was before melting and the customer is liable to refund full advance amount to Gold.</li>
+              <li style={{ marginBottom: '3px' }}>The above gold price per gram is valid for today only. The gold rates change on day-to-day basis.</li>
+              <li style={{ marginBottom: '3px' }}>Deductions include processing fees, documentation charges and other charges.</li>
+              <li style={{ marginBottom: '3px' }}>All the disputes arising from this transaction shall be settled by binding arbitration within jurisdiction of Hyderabad, Telangana.</li>
+            </ol>
+          </div>
+
+          {/* Date / Place / Signature */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '20px' }}>
+            <table style={{ fontSize: '11px', borderCollapse: 'collapse' }}><tbody>
+              <tr><td style={lb}>Date</td><td style={{ ...vl, minWidth: '150px' }}>{new Date().toLocaleDateString('en-IN')}</td></tr>
+              <tr><td style={lb}>Place</td><td style={vl}>{data?.application?.place || ''}</td></tr>
+            </tbody></table>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: '220px', borderBottom: '1px solid #666', paddingBottom: '40px', marginBottom: '4px' }}></div>
+              <div style={{ fontSize: '10px', color: '#555' }}>Customer Signature / Thumb Impression</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-center"><button onClick={handlePrint} className="px-6 py-2.5 bg-white text-gray-700 font-medium rounded-xl shadow-sm border border-gray-200 flex items-center gap-2 text-sm hover:bg-gray-50"><FileDown size={16} /> Print / Download</button></div>
+    </div>
+  )
+}
+
+
+/* ================================================================ */
+/*  PAYMENT VOUCHER PDF VIEW                                         */
+/* ================================================================ */
+function PaymentPdfView({ userIdentifier, applicationId }) {
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await accountsAPI.searchCustomer(userIdentifier)
+        setData(r.data || {})
+      } catch {} finally { setLoading(false) }
+    })()
+  }, [userIdentifier])
+
+  if (loading) return <div className="text-center py-20"><Loader size={36} className="animate-spin mx-auto text-amber-600" /><p className="text-gray-600 mt-4">Loading Payment Voucher...</p></div>
+
+  const acc = data?.customer || {}
+  const addrs = data?.addresses || []
+  const apps = data?.applications || []
+  const invoices = data?.invoices || []
+  const inv = applicationId ? invoices.find(i => i.application_id === applicationId) || invoices[invoices.length - 1] || {} : invoices[invoices.length - 1] || {}
+  const app = apps.find(a => a.application_id === (inv.application_id || applicationId)) || apps[0] || {}
+  const invItems = inv.items || []
+  const settlements = inv.settlements || []
+  const settlement = settlements.length > 0 ? settlements[settlements.length - 1] : {}
+
+  const name = [acc.first_name, acc.last_name].filter(Boolean).join(' ')
+  const present = addrs.find(a => /present|current/i.test(a.address_type)) || addrs[0] || {}
+  const perm = addrs.find(a => /permanent/i.test(a.address_type)) || addrs[1] || present
+  const fA = (a) => [a?.address_line, a?.street, a?.city, a?.state, a?.pincode].filter(Boolean).join(', ')
+  const age = (d) => { if (!d) return ''; const b = new Date(d), t = new Date(); let a = t.getFullYear() - b.getFullYear(); if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--; return a }
+  const cur = (n) => n != null ? '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '₹0.00'
+  const totalNet = invItems.reduce((s, it) => s + (parseFloat(it.net_amount) || 0), 0)
+
+  const blue = '#2c5f8a'; const cb = '1px solid #6a9ec7'
+  const lb = { border: cb, padding: '6px 10px', fontWeight: 'bold', background: '#f0f6fb', fontSize: '11px' }
+  const vl = { border: cb, padding: '6px 10px', fontSize: '11px' }
+
+  const handlePrint = () => {
+    const el = document.getElementById('pay-pdf-view')
+    if (!el) return
+    const w = window.open('','_blank')
+    w.document.write('<html><head><title>Payment Voucher</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Times New Roman",serif}@media print{@page{margin:10mm}}</style></head><body>' + el.innerHTML + '</body></html>')
+    w.document.close(); setTimeout(() => { w.print(); w.close() }, 400)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div id="pay-pdf-view" style={{ fontFamily: "'Times New Roman',Georgia,serif", maxWidth: '750px', margin: '0 auto', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ color: '#fff', lineHeight: '1.5' }}>
+            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Narayanguda</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>9885588220</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
+          </div>
+          <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>PAYMENT VOUCHER</div></div>
+          <div style={{ width: '100px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><img src="/svslogo-white.png" alt="SVS Gold" style={{ maxHeight: '65px', maxWidth: '95px', objectFit: 'contain' }} /></div>
+        </div>
+
+        <div style={{ padding: '20px 28px' }}>
+
+          {/* Bill No / Application No */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px' }}><tbody>
+            <tr><td style={lb} width="130">Bill No.</td><td style={vl}>{inv.invoice_no || '—'}</td><td style={lb} width="130">Date</td><td style={vl}>{inv.invoice_date || ''}</td></tr>
+            <tr><td style={lb}>Application No.</td><td style={vl}>{app.application_no || ''}</td><td style={lb}>Application Date</td><td style={vl}>{app.application_date || ''}</td></tr>
+          </tbody></table>
+
+          {/* Customer Details */}
+          {(() => {
+            const docs = data?.documents || []
+            const photoDoc = docs.find(d => /photo/i.test(d.document_type))
+            const photoUrl = acc.photo_url || photoDoc?.file_path || ''
+            const ageVal = acc.date_of_birth ? age(acc.date_of_birth) : ''
+            return (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px' }}><tbody>
+            <tr>
+              <td style={lb} width="120">Name</td>
+              <td style={vl} colSpan={5}>{name}</td>
+              <td style={{ border: cb, padding: '4px', textAlign: 'center', verticalAlign: 'top', width: '90px' }} rowSpan={5}>
+                {photoUrl ? (
+                  <img src={photoUrl} alt="Customer" style={{ width: '80px', height: '95px', objectFit: 'cover', borderRadius: '2px' }} />
+                ) : (
+                  <div style={{ width: '80px', height: '95px', background: '#f0f6fb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#999', border: '1px dashed #bbb', margin: '0 auto' }}>Photo</div>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <td style={lb}>Email ID</td>
+              <td style={vl}>{acc.email || ''}</td>
+              <td style={{ ...lb, width: '60px' }}>D.O.B.</td>
+              <td style={vl}>{acc.date_of_birth || ''}</td>
+              <td style={{ ...lb, width: '40px' }}>Age</td>
+              <td style={{ ...vl, width: '40px' }}>{ageVal}</td>
+            </tr>
+            <tr>
+              <td style={lb}>Mobile No.</td>
+              <td style={vl}>{acc.mobile || userIdentifier}</td>
+              <td style={lb}>Aadhar No.</td>
+              <td style={vl}>{acc.aadhar_no != null ? String(acc.aadhar_no) : ''}</td>
+              <td style={lb}>PAN No.</td>
+              <td style={vl}>{acc.pan_no != null ? String(acc.pan_no) : ''}</td>
+            </tr>
+            <tr>
+              <td style={lb}>Present Address</td>
+              <td style={vl} colSpan={5}>{fA(present)}</td>
+            </tr>
+            <tr>
+              <td style={lb}>Permanent Address</td>
+              <td style={vl} colSpan={5}>{fA(perm)}</td>
+            </tr>
+          </tbody></table>
+            )
+          })()}
+
+          {/* Items Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', marginBottom: '12px' }}>
+            <thead><tr style={{ background: '#f0f6fb' }}>
+              {['S.\nNo.','Item','Wt. Before\nMelting','Wt. After\nMelting','Purity\nAfter\nMelting','Gold Rate\nPer Gm.','Gross\nAmount','Deductions','Net\nAmount'].map((h,i) => (
+                <th key={i} style={{ border: cb, padding: '6px 4px', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'pre-line', verticalAlign: 'bottom', lineHeight: '1.3' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {invItems.map((it, i) => (
+                <tr key={i}>
+                  <td style={{ ...vl, textAlign: 'center' }}>{i+1}</td>
+                  <td style={vl}>{it.item_name}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.weight_before_melting}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.weight_after_melting}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.purity_after_melting}%</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{cur(it.gold_rate_per_gm)}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{cur(it.gross_amount)}</td>
+                  <td style={{ ...vl, textAlign: 'center' }}>{it.deduction_percentage || 0}%</td>
+                  <td style={{ ...vl, textAlign: 'center', fontWeight: 'bold' }}>{cur(it.net_amount)}</td>
+                </tr>
+              ))}
+              {Array.from({ length: Math.max(0, 6 - invItems.length) }).map((_, i) => (
+                <tr key={`e${i}`}>{Array.from({length:9}).map((_,j) => <td key={j} style={{ ...vl, height: '24px' }}>&nbsp;</td>)}</tr>
+              ))}
+              <tr style={{ background: '#f0f6fb' }}>
+                <td style={lb} colSpan={7}></td>
+                <td style={{ ...lb, textAlign: 'center' }}>Total Net Amount</td>
+                <td style={{ ...vl, textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{cur(inv.total_net_amount || totalNet)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Amount in Words & Payment Reference */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}><tbody>
+            <tr><td style={lb} width="160">Amount In Words</td><td style={{ ...vl, fontStyle: 'italic' }}>{inv.amount_in_words || ''}</td></tr>
+            <tr><td style={lb}>Note: Payment Reference No.</td><td style={vl}>{settlement.reference_no || inv.remarks || '—'}</td></tr>
+          </tbody></table>
+
+          {/* Terms & Conditions */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: blue, marginBottom: '6px' }}>Terms & Conditions</div>
+            <ol style={{ fontSize: '9.5px', lineHeight: '1.8', paddingLeft: '16px', margin: 0 }}>
+              <li style={{ marginBottom: '3px' }}>SVS Gold Private Limited (' SVS Gold') purchases the gold items based on the Customer's declaration that he/she is the only legal owner of the gold and is entitled to sell them.</li>
+              <li style={{ marginBottom: '3px' }}>SVS Gold shall intimate the appropriate authorities in case it finds the Customer is trying to sell the stolen or counterfeit gold items.</li>
+              <li style={{ marginBottom: '3px' }}>Under any circumstance SVS Gold shall not return gold items brought from the customers.</li>
+              <li style={{ marginBottom: '3px' }}>Deductions include processing fees, documentation charges and other charges.</li>
+              <li style={{ marginBottom: '3px' }}>All the disputes arising from this transaction shall be settled by binding arbitration within jurisdiction of Hyderabad, Telangana.</li>
+            </ol>
+          </div>
+
+          {/* Signatures */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '30px' }}>
+            <div>
+              <div style={{ width: '200px', borderBottom: '1px solid #666', paddingBottom: '40px', marginBottom: '4px' }}></div>
+              <div style={{ fontSize: '10px', color: '#555' }}>Authorised Signatory</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#333', marginBottom: '40px' }}>Accepted & Received</div>
+              <div style={{ width: '220px', borderBottom: '1px solid #666', marginBottom: '4px' }}></div>
+              <div style={{ fontSize: '10px', color: '#555' }}>Customer Signature / Thumb Impression</div>
+            </div>
+          </div>
+
+          {/* Date / Place */}
+          <div style={{ marginTop: '16px' }}>
+            <table style={{ fontSize: '11px', borderCollapse: 'collapse' }}><tbody>
+              <tr><td style={lb}>Date</td><td style={{ ...vl, minWidth: '150px' }}>{inv.invoice_date || new Date().toLocaleDateString('en-IN')}</td></tr>
+              <tr><td style={lb}>Place</td><td style={vl}>{app.place || ''}</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-center"><button onClick={handlePrint} className="px-6 py-2.5 bg-white text-gray-700 font-medium rounded-xl shadow-sm border border-gray-200 flex items-center gap-2 text-sm hover:bg-gray-50"><FileDown size={16} /> Print / Download</button></div>
     </div>
   )
 }

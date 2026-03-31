@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Loader, Plus, Trash2, ChevronLeft, ChevronRight, AlertCircle, Save, Check,
   FileText, CreditCard, Receipt, Banknote, Eye, LogOut, Menu, X, Home, Calculator, Download
 } from 'lucide-react'
-import { paymentsAPI } from '../api/api'
+import { paymentsAPI, accountsAPI } from '../api/api'
 
 export default function PaymentPage() {
   const location = useLocation()
@@ -33,7 +33,7 @@ export default function PaymentPage() {
           id: Date.now() + i, mobile: loggedInMobile, item_name: item.item_name || '',
           weight_before_melting: item.gross_weight_gms || 0, weight_after_melting: 0,
           purity_after_melting: item.purity_percentage || 0, gold_rate_per_gm: item.gold_rate_per_gm || 0,
-          gross_amount: 0, deductions_amount: 0, net_amount: 0, _savedItemId: null
+          gross_amount: 0, deduction_percentage: 0, net_amount: 0, _savedItemId: null
         }))
       : []
   )
@@ -44,6 +44,60 @@ export default function PaymentPage() {
   })
 
   const [allComplete, setAllComplete] = useState(false)
+  const [checkingProgress, setCheckingProgress] = useState(true)
+
+  // Detect actual payment progress from search API by application_id
+  useEffect(() => {
+    if (!loggedInMobile) { setCheckingProgress(false); return }
+
+    const detectProgress = async () => {
+      setCheckingProgress(true)
+      try {
+        const res = await accountsAPI.searchCustomer(loggedInMobile)
+        const d = res.data || {}
+
+        // Get application_id from navigation state
+        const appId = appData?.application?.application_id || appData?.applicationId
+
+        // Find invoice matched by application_id
+        const allInvoices = d.invoices || []
+        const appInvoice = appId
+          ? allInvoices.find(inv => inv.application_id === appId)
+          : allInvoices[allInvoices.length - 1]
+
+        if (appInvoice) {
+          const hasItems = !!appInvoice.has_items || !!appInvoice.items_count || (appInvoice.invoice_items?.length > 0)
+          const hasSettlement = !!appInvoice.settlement_id || !!appInvoice.payment_mode || !!appInvoice.settlement_status
+
+          if (hasSettlement) {
+            setAllComplete(true)
+          } else if (hasItems) {
+            // Step 1 & 2 done, need settlement
+            setStep(3)
+            setInvoice(prev => ({ ...prev, invoice_no: appInvoice.invoice_no || prev.invoice_no }))
+          } else {
+            // Step 1 done, need items
+            setStep(2)
+            setInvoice(prev => ({ ...prev, invoice_no: appInvoice.invoice_no || prev.invoice_no }))
+          }
+        }
+        // else: no invoice for this app_id → step 1 (default)
+      } catch {
+        // search failed — start from step 1
+      } finally {
+        setCheckingProgress(false)
+      }
+    }
+
+    detectProgress()
+  }, [loggedInMobile])
+
+  // Save step progress to localStorage as backup
+  const saveProgress = (stepNum, data) => {
+    const key = `svs_payment_progress_${loggedInMobile}`
+    const existing = JSON.parse(localStorage.getItem(key) || '{}')
+    localStorage.setItem(key, JSON.stringify({ ...existing, step: stepNum, ...data }))
+  }
 
   const inputClass = 'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
   const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide'
@@ -64,7 +118,9 @@ export default function PaymentPage() {
 
   const recalcItem = (item) => {
     const gross = (parseFloat(item.weight_after_melting) || 0) * (parseFloat(item.gold_rate_per_gm) || 0)
-    const net = gross - (parseFloat(item.deductions_amount) || 0)
+    const dedPct = parseFloat(item.deduction_percentage) || 0
+    const dedAmount = Math.round((gross * dedPct / 100) * 100) / 100
+    const net = Math.round((gross - dedAmount) * 100) / 100
     return { ...item, gross_amount: parseFloat(gross.toFixed(2)), net_amount: parseFloat(net.toFixed(2)) }
   }
 
@@ -74,12 +130,14 @@ export default function PaymentPage() {
       setLoading(true); setError('')
       const words = invoice.amount_in_words || numberToWords(invoice.total_net_amount) + ' Rupees Only'
       await paymentsAPI.createInvoice({ ...invoice, amount_in_words: words })
-      setInvoice(p => ({ ...p, amount_in_words: words })); setStep(2)
+      setInvoice(p => ({ ...p, amount_in_words: words }))
+      saveProgress(2, { invoice_no: invoice.invoice_no })
+      setStep(2)
     } catch (err) { setError(err.response?.data?.message || 'Failed to create invoice') }
     finally { setLoading(false) }
   }
 
-  const addInvoiceItem = () => setInvoiceItems(prev => [...prev, { id: Date.now(), mobile: loggedInMobile, item_name: '', weight_before_melting: 0, weight_after_melting: 0, purity_after_melting: 0, gold_rate_per_gm: 0, gross_amount: 0, deductions_amount: 0, net_amount: 0, _savedItemId: null }])
+  const addInvoiceItem = () => setInvoiceItems(prev => [...prev, { id: Date.now(), mobile: loggedInMobile, item_name: '', weight_before_melting: 0, weight_after_melting: 0, purity_after_melting: 0, gold_rate_per_gm: 0, gross_amount: 0, deduction_percentage: 0, net_amount: 0, _savedItemId: null }])
   const updateInvoiceItem = (idx, f, v) => setInvoiceItems(prev => { const u = [...prev]; u[idx] = recalcItem({ ...u[idx], [f]: v }); return u })
   const removeInvoiceItem = (idx) => setInvoiceItems(prev => prev.filter((_, i) => i !== idx))
 
@@ -90,7 +148,7 @@ export default function PaymentPage() {
       setLoading(true); setError('')
       const saved = []
       for (const item of invoiceItems) { const { id, _savedItemId, ...p } = item; const r = await paymentsAPI.addInvoiceItem(p); saved.push({ ...item, _savedItemId: r.data?.invoice_item_id || r.data?.id || null }) }
-      setInvoiceItems(saved); setStep(3)
+      setInvoiceItems(saved); saveProgress(3, { invoice_no: invoice.invoice_no }); setStep(3)
     } catch (err) { setError(err.response?.data?.message || 'Failed to save items') }
     finally { setLoading(false) }
   }
@@ -100,7 +158,9 @@ export default function PaymentPage() {
     if (!settlement.paid_amount || settlement.paid_amount <= 0) { setError('Paid amount required'); return }
     try {
       setLoading(true); setError('')
-      await paymentsAPI.addSettlement(settlement); setAllComplete(true)
+      await paymentsAPI.addSettlement(settlement)
+      localStorage.removeItem(`svs_payment_progress_${loggedInMobile}`)
+      setAllComplete(true)
     } catch (err) { setError(err.response?.data?.message || 'Failed to save settlement') }
     finally { setLoading(false) }
   }
@@ -115,6 +175,15 @@ export default function PaymentPage() {
         <h2 className="text-xl font-bold text-gray-800 mb-2">No Data Found</h2>
         <p className="text-gray-500 mb-6">Please complete the estimation first.</p>
         <button onClick={() => navigate('/dashboard')} className="px-6 py-3 text-white font-bold rounded-xl" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)' }}>Go to Dashboard</button>
+      </div>
+    </div>
+  )
+
+  if (checkingProgress) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #fdf8f0, #f9edda)' }}>
+      <div className="bg-white rounded-2xl shadow-lg p-10 text-center max-w-md">
+        <Loader size={36} className="animate-spin mx-auto mb-4 text-amber-600" />
+        <p className="text-gray-600">Checking payment progress...</p>
       </div>
     </div>
   )
@@ -214,14 +283,14 @@ export default function PaymentPage() {
                         <div><label className={labelClass}>Purity After (%)</label><input type="text" value={item.purity_after_melting} onChange={e => updateInvoiceItem(idx, 'purity_after_melting', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                         <div><label className={labelClass}>Gold Rate/gm (₹)</label><input type="text" value={item.gold_rate_per_gm} onChange={e => updateInvoiceItem(idx, 'gold_rate_per_gm', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                         <div><label className={labelClass}>Gross Amount (₹)</label><div className={readOnlyClass}>₹{item.gross_amount?.toLocaleString('en-IN') || 0}</div></div>
-                        <div><label className={labelClass}>Deductions (₹)</label><input type="text" value={item.deductions_amount} onChange={e => updateInvoiceItem(idx, 'deductions_amount', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
+                        <div><label className={labelClass}>Deductions (%)</label><input type="text" value={item.deduction_percentage} onChange={e => updateInvoiceItem(idx, 'deduction_percentage', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                       </div>
                       <div className="flex justify-end"><div className="px-6 py-3 bg-green-50 border-2 border-green-200 rounded-xl"><span className="text-xs text-gray-500">Net: </span><span className="font-bold text-green-700 text-lg">₹{item.net_amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</span></div></div>
                     </div>
                   ))}
                 </div>
                 <div className="flex justify-center gap-4">
-                  <button onClick={() => { setStep(1); setError('') }} className="px-8 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl flex items-center gap-2 text-sm"><ChevronLeft size={16} /> Back</button>
+                  {/* <button onClick={() => { setStep(1); setError('') }} className="px-8 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl flex items-center gap-2 text-sm"><ChevronLeft size={16} /> Back</button> */}
                   <button onClick={handleStep2} disabled={loading} className="px-10 py-2.5 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Saving...</> : <>Save Items & Next <ChevronRight size={16} /></>}</button>
                 </div>
               </div>
@@ -274,6 +343,7 @@ export default function PaymentPage() {
                   <div><h3 className="text-lg font-bold text-green-800">Payment Completed!</h3><p className="text-sm text-green-600 mt-1">Invoice {invoice.invoice_no} • ₹{settlement.paid_amount.toLocaleString('en-IN')} via {settlement.payment_mode.replace(/_/g,' ')}</p></div>
                 </div>
 
+                {/* ======== PAYMENT VOUCHER PDF REPLICA ======== */}
                 <div id="payment-voucher-print" style={{ fontFamily: "'Times New Roman',Georgia,serif", maxWidth: '750px', margin: '0 auto', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
 
                   {/* Header */}
@@ -363,7 +433,7 @@ export default function PaymentPage() {
                             <td style={{ ...vl, textAlign: 'center' }}>{item.purity_after_melting}%</td>
                             <td style={{ ...vl, textAlign: 'center' }}>₹{item.gold_rate_per_gm}</td>
                             <td style={{ ...vl, textAlign: 'center' }}>₹{item.gross_amount?.toLocaleString('en-IN')}</td>
-                            <td style={{ ...vl, textAlign: 'center' }}>₹{item.deductions_amount || 0}</td>
+                            <td style={{ ...vl, textAlign: 'center' }}>{item.deduction_percentage || 0}%</td>
                             <td style={{ ...vl, textAlign: 'center', fontWeight: 'bold' }}>₹{item.net_amount?.toLocaleString('en-IN')}</td>
                           </tr>
                         ))}

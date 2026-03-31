@@ -21,18 +21,22 @@ api.interceptors.response.use(
 export const accountsAPI = {
   checkAccount: (data) => api.post('/accounts/check', data),
   createAccount: (data) => api.post('/accounts/create', data),
+  updateAccount: (data) => api.put('/accounts/update', data),
   addAddress: (mobile, data) => api.post(`/accounts/addresses?mobile=${mobile}`, data),
   addBankAccount: (mobile, data) => api.post(`/accounts/bank-accounts?mobile=${mobile}`, data),
   addDocument: (mobile, data) => api.post(`/accounts/documents?mobile=${mobile}`, data),
+  searchCustomer: (mobile) => api.get(`/customers/search?mobile=${mobile}`),
 }
 
 export const applicationsAPI = {
+  getGoldItems: () => api.get('/gold-items'),
+  getBranches: () => api.get('/branches'),
   getApplicationsByUser: (mobile) => api.get(`/applications/by-user?mobile=${mobile}`),
   createApplication: (data) => api.post('/applications/create', data),
   addPledgeDetails: (data) => api.post('/applications/pledge-details', data),
   addOrnaments: (data) => api.post('/applications/ornaments', data),
   addEstimation: (data) => api.post('/estimations/items', data),
-  getFinalPreview: (mobile) => api.get(`/applications/final-preview?mobile=${mobile}`),
+  // getFinalPreview: (mobile) => api.get(`/applications/final-preview?mobile=${mobile}`),
 }
 
 export const paymentsAPI = {
@@ -40,6 +44,15 @@ export const paymentsAPI = {
   addInvoiceItem: (data) => api.post('/payments/invoice/item', data),
   addDeduction: (data) => api.post('/payments/deduction', data),
   addSettlement: (data) => api.post('/payments/settlement', data),
+}
+
+export const transactionsAPI = {
+  getAll: (mobile, days = 30) => {
+    const today = new Date()
+    const start = today.getMonth() + 1
+    const end = today.getMonth() + 2
+    return api.get(`/transactions/all?mobile=${mobile}&start_date=${start}&end_date=${end}&days=${days}`)
+  }
 }
 
 export default api
