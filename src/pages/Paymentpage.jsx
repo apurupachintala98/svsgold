@@ -21,6 +21,9 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Pledge total due for settlement calculation
+  const pledgeDue = parseFloat(appData?.pledge_details?.total_due || appData?._appPledge?.total_due || 0)
+
   const [invoice, setInvoice] = useState({
     mobile: loggedInMobile, invoice_no: `INV-${Date.now()}`,
     invoice_date: new Date().toISOString().split('T')[0],
@@ -29,17 +32,20 @@ export default function PaymentPage() {
 
   const [invoiceItems, setInvoiceItems] = useState(
     estimationItems.length > 0
-      ? estimationItems.map((item, i) => ({
-          id: Date.now() + i, mobile: loggedInMobile, item_name: item.item_name || '',
-          weight_before_melting: item.gross_weight_gms || 0, weight_after_melting: 0,
-          purity_after_melting: item.purity_percentage || 0, gold_rate_per_gm: item.gold_rate_per_gm || 0,
-          gross_amount: 0, deduction_percentage: 0, net_amount: 0, _savedItemId: null
-        }))
+      ? estimationItems.map((item, i) => {
+          const netWt = Math.round(((parseFloat(item.gross_weight_gms) || 0) - (parseFloat(item.stone_weight_gms) || 0)) * 100) / 100
+          return {
+            id: Date.now() + i, mobile: loggedInMobile, item_name: item.item_name || '',
+            weight_before_melting: netWt || item.gross_weight_gms || 0, weight_after_melting: 0,
+            purity_after_melting: item.purity_percentage || 0, gold_rate_per_gm: item.gold_rate_per_gm || 0,
+            gross_amount: 0, deduction_percentage: item.deduction_percentage || 0, deductions_amount: 0, net_amount: 0, _savedItemId: null
+          }
+        })
       : []
   )
 
   const [settlement, setSettlement] = useState({
-    mobile: loggedInMobile, payment_mode: 'BANK_TRANSFER', paid_amount: estimationTotal,
+    mobile: loggedInMobile, payment_mode: 'BANK_TRANSFER', paid_amount: 0,
     payment_date: new Date().toISOString().split('T')[0], reference_no: '', bank_name: ''
   })
 
@@ -117,43 +123,58 @@ export default function PaymentPage() {
   }
 
   const recalcItem = (item) => {
-    const gross = (parseFloat(item.weight_after_melting) || 0) * (parseFloat(item.gold_rate_per_gm) || 0)
+    const wtAfter = parseFloat(item.weight_after_melting) || 0
+    const purity = parseFloat(item.purity_after_melting) || 0
+    const rate = parseFloat(item.gold_rate_per_gm) || 0
+    // gross = weight_after_melting * (purity / 100) * gold_rate_per_gm
+    const gross = Math.round((wtAfter * (purity / 100) * rate) * 100) / 100
     const dedPct = parseFloat(item.deduction_percentage) || 0
     const dedAmount = Math.round((gross * dedPct / 100) * 100) / 100
     const net = Math.round((gross - dedAmount) * 100) / 100
-    return { ...item, gross_amount: parseFloat(gross.toFixed(2)), net_amount: parseFloat(net.toFixed(2)) }
+    return { ...item, gross_amount: parseFloat(gross.toFixed(2)), deductions_amount: dedAmount, net_amount: parseFloat(net.toFixed(2)) }
   }
 
+  // Total of all invoice items
+  const itemsTotal = invoiceItems.reduce((s, it) => s + (parseFloat(it.net_amount) || 0), 0)
+  // Amount payable after pledge deduction
+  const payableAmount = Math.round((itemsTotal - pledgeDue) * 100) / 100
+
   const handleStep1 = async () => {
-    if (!invoice.total_net_amount || invoice.total_net_amount <= 0) { setError('Total amount must be > 0'); return }
+    // Step 1 is now just Invoice Items — auto-create invoice first
+    if (invoiceItems.length === 0) { setError('Add at least one item'); return }
+    for (let i = 0; i < invoiceItems.length; i++) {
+      if (!invoiceItems[i].item_name?.trim()) { setError(`Item ${i+1}: name required`); return }
+      if (String(invoiceItems[i].purity_after_melting).includes('.')) { setError(`Item ${i+1}: purity must be a whole number (no decimals)`); return }
+      if (!parseFloat(invoiceItems[i].deduction_percentage) || parseFloat(invoiceItems[i].deduction_percentage) <= 0) { setError(`Item ${i+1}: deduction percentage must be greater than 0`); return }
+    }
     try {
       setLoading(true); setError('')
-      const words = invoice.amount_in_words || numberToWords(invoice.total_net_amount) + ' Rupees Only'
-      await paymentsAPI.createInvoice({ ...invoice, amount_in_words: words })
-      setInvoice(p => ({ ...p, amount_in_words: words }))
+      const words = numberToWords(Math.round(payableAmount > 0 ? payableAmount : itemsTotal)) + ' Rupees Only'
+      await paymentsAPI.createInvoice({ ...invoice, total_net_amount: itemsTotal, amount_in_words: words })
+      setInvoice(p => ({ ...p, total_net_amount: itemsTotal, amount_in_words: words }))
+
+      // Save items
+      const saved = []
+      for (const item of invoiceItems) {
+        const { id, _savedItemId, ...p } = item
+        const r = await paymentsAPI.addInvoiceItem(p)
+        saved.push({ ...item, _savedItemId: r.data?.invoice_item_id || r.data?.id || null })
+      }
+      setInvoiceItems(saved)
+
+      // Update settlement paid_amount
+      setSettlement(prev => ({ ...prev, paid_amount: payableAmount > 0 ? payableAmount : itemsTotal }))
       saveProgress(2, { invoice_no: invoice.invoice_no })
       setStep(2)
-    } catch (err) { setError(err.response?.data?.message || 'Failed to create invoice') }
+    } catch (err) { setError(err.response?.data?.message || 'Failed to save') }
     finally { setLoading(false) }
   }
 
-  const addInvoiceItem = () => setInvoiceItems(prev => [...prev, { id: Date.now(), mobile: loggedInMobile, item_name: '', weight_before_melting: 0, weight_after_melting: 0, purity_after_melting: 0, gold_rate_per_gm: 0, gross_amount: 0, deduction_percentage: 0, net_amount: 0, _savedItemId: null }])
+  const addInvoiceItem = () => setInvoiceItems(prev => [...prev, { id: Date.now(), mobile: loggedInMobile, item_name: '', weight_before_melting: 0, weight_after_melting: 0, purity_after_melting: 0, gold_rate_per_gm: 0, gross_amount: 0, deduction_percentage: 0, deductions_amount: 0, net_amount: 0, _savedItemId: null }])
   const updateInvoiceItem = (idx, f, v) => setInvoiceItems(prev => { const u = [...prev]; u[idx] = recalcItem({ ...u[idx], [f]: v }); return u })
   const removeInvoiceItem = (idx) => setInvoiceItems(prev => prev.filter((_, i) => i !== idx))
 
   const handleStep2 = async () => {
-    if (invoiceItems.length === 0) { setError('Add at least one item'); return }
-    for (let i = 0; i < invoiceItems.length; i++) { if (!invoiceItems[i].item_name?.trim()) { setError(`Item ${i+1}: name required`); return } }
-    try {
-      setLoading(true); setError('')
-      const saved = []
-      for (const item of invoiceItems) { const { id, _savedItemId, ...p } = item; const r = await paymentsAPI.addInvoiceItem(p); saved.push({ ...item, _savedItemId: r.data?.invoice_item_id || r.data?.id || null }) }
-      setInvoiceItems(saved); saveProgress(3, { invoice_no: invoice.invoice_no }); setStep(3)
-    } catch (err) { setError(err.response?.data?.message || 'Failed to save items') }
-    finally { setLoading(false) }
-  }
-
-  const handleStep3 = async () => {
     if (!settlement.payment_mode) { setError('Select payment mode'); return }
     if (!settlement.paid_amount || settlement.paid_amount <= 0) { setError('Paid amount required'); return }
     try {
@@ -188,7 +209,7 @@ export default function PaymentPage() {
     </div>
   )
 
-  const stepsMeta = [{ num: 1, label: 'Create Invoice', icon: Receipt }, { num: 2, label: 'Invoice Items', icon: FileText }, { num: 3, label: 'Settlement', icon: Banknote }]
+  const stepsMeta = [{ num: 1, label: 'Invoice Items', icon: FileText }, { num: 2, label: 'Settlement', icon: Banknote }]
 
   return (
     <div className="flex h-screen" style={{ background: 'linear-gradient(135deg, #fdf8f0, #f9edda, #fdf8f0)' }}>
@@ -245,75 +266,82 @@ export default function PaymentPage() {
 
             {error && <div className="flex items-start gap-3 p-4 bg-red-50 border-2 border-red-200 rounded-xl"><AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} /><span className="text-sm text-red-700">{error}</span></div>}
 
-            {/* Step 1 */}
+            {/* Step 1: Invoice Items (with invoice info header) */}
             {step === 1 && !allComplete && (
-              <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
-                <div><h2 className="text-xl font-bold text-gray-800">Create Invoice</h2><p className="text-sm text-gray-500 mt-1">Enter invoice details to begin payment</p></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div><label className={labelClass}>Invoice Number</label><input value={invoice.invoice_no} disabled className={readOnlyClass} /></div>
-                  <div><label className={labelClass}>Invoice Date</label><input type="date" value={invoice.invoice_date} onChange={e => setInvoice(p => ({ ...p, invoice_date: e.target.value }))} className={inputClass} /></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div><label className={labelClass}>Total Net Amount (₹)</label><input type="text" value={invoice.total_net_amount} onChange={e => setInvoice(p => ({ ...p, total_net_amount: parseFloat(e.target.value.replace(/[^0-9.]/g,'')) || 0 }))} className={inputClass} /></div>
-                  <div><label className={labelClass}>Amount in Words</label><input value={invoice.amount_in_words || numberToWords(invoice.total_net_amount) + ' Rupees Only'} onChange={e => setInvoice(p => ({ ...p, amount_in_words: e.target.value }))} className={inputClass} /></div>
-                </div>
-                <div><label className={labelClass}>Remarks</label><textarea value={invoice.remarks} onChange={e => setInvoice(p => ({ ...p, remarks: e.target.value }))} rows={3} placeholder="Optional remarks..." className={inputClass} /></div>
-                <div className="flex justify-center"><button onClick={handleStep1} disabled={loading} className="px-10 py-3 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Saving...</> : <>Save Invoice & Next <ChevronRight size={16} /></>}</button></div>
-              </div>
-            )}
-
-            {/* Step 2 */}
-            {step === 2 && !allComplete && (
               <div className="space-y-6">
+                <div className="bg-white rounded-2xl shadow-md p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><label className={labelClass}>Invoice Number</label><div className={readOnlyClass}>{invoice.invoice_no}</div></div>
+                    <div><label className={labelClass}>Invoice Date</label><input type="date" value={invoice.invoice_date} onChange={e => setInvoice(p => ({ ...p, invoice_date: e.target.value }))} className={inputClass} /></div>
+                  </div>
+                </div>
                 <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
                   <div className="flex items-center justify-between">
                     <div><h2 className="text-xl font-bold text-gray-800">Invoice Items</h2><p className="text-sm text-gray-500 mt-1">Add items with melting weights and rates</p></div>
                     <button onClick={addInvoiceItem} className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100"><Plus size={18} /> Add Item</button>
                   </div>
-                  {invoiceItems.length === 0 && <div className="text-center py-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300"><FileText size={40} className="mx-auto text-gray-400 mb-3" /><p className="text-gray-500">No items. Click "Add Item".</p></div>}
+                  {invoiceItems.length === 0 && <div className="text-center py-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300"><FileText size={40} className="mx-auto text-gray-400 mb-3" /><p className="text-gray-500">No items added yet.</p></div>}
                   {invoiceItems.map((item, idx) => (
                     <div key={item.id || idx} className="bg-gray-50 rounded-xl p-6 space-y-4 border border-gray-100">
-                      <div className="flex items-center justify-between"><h4 className="font-bold text-gray-800">Item {idx+1} {item.item_name && `— ${item.item_name}`}</h4><div className="flex items-center gap-3"><span className="text-sm font-semibold text-green-600">Net: ₹{item.net_amount?.toLocaleString('en-IN') || 0}</span><button onClick={() => removeInvoiceItem(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button></div></div>
+                      <div className="flex items-center justify-between"><h4 className="font-bold text-gray-800">Item {idx+1} {item.item_name && `— ${item.item_name}`}</h4><div className="flex items-center gap-3"><span className="text-sm font-semibold text-green-600">Net: ₹{(item.net_amount || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</span><button onClick={() => removeInvoiceItem(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button></div></div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div><label className={labelClass}>Item Name *</label><input value={item.item_name} onChange={e => updateInvoiceItem(idx, 'item_name', e.target.value)} className={inputClass} /></div>
                         <div><label className={labelClass}>Wt Before Melting (g)</label><input type="text" value={item.weight_before_melting} onChange={e => updateInvoiceItem(idx, 'weight_before_melting', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                         <div><label className={labelClass}>Wt After Melting (g)</label><input type="text" value={item.weight_after_melting} onChange={e => updateInvoiceItem(idx, 'weight_after_melting', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div><label className={labelClass}>Purity After (%)</label><input type="text" value={item.purity_after_melting} onChange={e => updateInvoiceItem(idx, 'purity_after_melting', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
+                        <div><label className={labelClass}>Purity After (%)</label><input type="text" value={item.purity_after_melting} onChange={e => updateInvoiceItem(idx, 'purity_after_melting', e.target.value.replace(/[^0-9]/g,''))} className={inputClass} /></div>
                         <div><label className={labelClass}>Gold Rate/gm (₹)</label><input type="text" value={item.gold_rate_per_gm} onChange={e => updateInvoiceItem(idx, 'gold_rate_per_gm', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
-                        <div><label className={labelClass}>Gross Amount (₹)</label><div className={readOnlyClass}>₹{item.gross_amount?.toLocaleString('en-IN') || 0}</div></div>
+                        <div><label className={labelClass}>Gross Amount (₹)</label><div className="px-4 py-3 bg-amber-50 border-2 border-amber-100 rounded-xl text-amber-800 font-semibold">₹{(item.gross_amount || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</div></div>
                         <div><label className={labelClass}>Deductions (%)</label><input type="text" value={item.deduction_percentage} onChange={e => updateInvoiceItem(idx, 'deduction_percentage', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                       </div>
-                      <div className="flex justify-end"><div className="px-6 py-3 bg-green-50 border-2 border-green-200 rounded-xl"><span className="text-xs text-gray-500">Net: </span><span className="font-bold text-green-700 text-lg">₹{item.net_amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</span></div></div>
+                      <div className="flex justify-end"><div className="px-6 py-3 bg-green-50 border-2 border-green-200 rounded-xl"><span className="text-xs text-gray-500">Net: </span><span className="font-bold text-green-700 text-lg">₹{(item.net_amount || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</span></div></div>
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-center gap-4">
-                  {/* <button onClick={() => { setStep(1); setError('') }} className="px-8 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl flex items-center gap-2 text-sm"><ChevronLeft size={16} /> Back</button> */}
-                  <button onClick={handleStep2} disabled={loading} className="px-10 py-2.5 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Saving...</> : <>Save Items & Next <ChevronRight size={16} /></>}</button>
+                {invoiceItems.length > 0 && (
+                  <div className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-gray-800">Items Total</span>
+                      <span className="text-2xl font-bold text-amber-800">₹{itemsTotal.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                    </div>
+                    {pledgeDue > 0 && (<>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <span className="text-sm text-red-600 font-medium">Less: Pledge Total Due</span>
+                        <span className="text-lg font-semibold text-red-600">- ₹{pledgeDue.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t-2 border-amber-200">
+                        <span className="text-lg font-bold text-gray-900">Amount Payable to Customer</span>
+                        <span className="text-2xl font-bold text-green-700">₹{payableAmount.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                      </div>
+                    </>)}
+                  </div>
+                )}
+                <div className="flex justify-center">
+                  <button onClick={handleStep1} disabled={loading} className="px-10 py-3 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Saving...</> : <>Save Items & Next <ChevronRight size={16} /></>}</button>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Settlement */}
-            {step === 3 && !allComplete && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
-                  <div><h2 className="text-xl font-bold text-gray-800">Settlement</h2><p className="text-sm text-gray-500 mt-1">Payment mode and details</p></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div><label className={labelClass}>Payment Mode *</label>
-                      <select value={settlement.payment_mode} onChange={e => setSettlement(p => ({ ...p, payment_mode: e.target.value }))} className={inputClass}>
-                        <option value="BANK_TRANSFER">Bank Transfer</option><option value="CASH">Cash</option><option value="CHEQUE">Cheque</option><option value="UPI">UPI</option><option value="NEFT">NEFT</option><option value="RTGS">RTGS</option><option value="IMPS">IMPS</option>
-                      </select>
-                    </div>
-                    <div><label className={labelClass}>Paid Amount (₹) *</label><input type="text" value={settlement.paid_amount} onChange={e => setSettlement(p => ({ ...p, paid_amount: parseFloat(e.target.value.replace(/[^0-9.]/g,'')) || 0 }))} className={inputClass} /></div>
+            {/* Step 2: Settlement */}
+            {step === 2 && !allComplete && (
+              <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
+                <div><h2 className="text-xl font-bold text-gray-800">Settlement</h2><p className="text-sm text-gray-500 mt-1">Payment mode and details</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div><label className={labelClass}>Payment Mode *</label>
+                    <select value={settlement.payment_mode} onChange={e => setSettlement(p => ({ ...p, payment_mode: e.target.value }))} className={inputClass}>
+                      <option value="BANK_TRANSFER">Bank Transfer</option><option value="CASH">Cash</option><option value="CHEQUE">Cheque</option><option value="UPI">UPI</option><option value="NEFT">NEFT</option><option value="RTGS">RTGS</option><option value="IMPS">IMPS</option>
+                    </select>
                   </div>
-                  <div><label className={labelClass}>Payment Date</label><input type="date" value={settlement.payment_date} onChange={e => setSettlement(p => ({ ...p, payment_date: e.target.value }))} className={inputClass} /></div>
+                  <div><label className={labelClass}>Paid Amount (₹) *</label>
+                    <input type="text" value={settlement.paid_amount} onChange={e => setSettlement(p => ({ ...p, paid_amount: parseFloat(e.target.value.replace(/[^0-9.]/g,'')) || 0 }))} className={inputClass} />
+                    {pledgeDue > 0 && <p className="text-xs text-green-600 mt-1">Items Total ₹{itemsTotal.toLocaleString('en-IN')} − Pledge Due ₹{pledgeDue.toLocaleString('en-IN')} = ₹{payableAmount.toLocaleString('en-IN')}</p>}
+                  </div>
                 </div>
+                <div><label className={labelClass}>Payment Date</label><input type="date" value={settlement.payment_date} onChange={e => setSettlement(p => ({ ...p, payment_date: e.target.value }))} className={inputClass} /></div>
                 <div className="flex justify-center gap-4">
-                  <button onClick={() => { setStep(2); setError('') }} className="px-8 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl flex items-center gap-2 text-sm"><ChevronLeft size={16} /> Back</button>
-                  <button onClick={handleStep3} disabled={loading} className="px-10 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Saving...</> : <><CreditCard size={16} /> Complete Settlement</>}</button>
+                  <button onClick={() => { setStep(1); setError('') }} className="px-8 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl flex items-center gap-2 text-sm"><ChevronLeft size={16} /> Back</button>
+                  <button onClick={handleStep2} disabled={loading} className="px-10 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center gap-2 text-sm">{loading ? <><Loader size={16} className="animate-spin" /> Processing...</> : <><CreditCard size={16} /> Complete Settlement</>}</button>
                 </div>
               </div>
             )}
@@ -338,7 +366,7 @@ export default function PaymentPage() {
               return (
               <div className="space-y-6">
                 {/* Success */}
-                <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex items-start gap-4">
+                <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex items-start gap-4 mb-4">
                   <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0"><Check size={22} className="text-white" /></div>
                   <div><h3 className="text-lg font-bold text-green-800">Payment Completed!</h3><p className="text-sm text-green-600 mt-1">Invoice {invoice.invoice_no} • ₹{settlement.paid_amount.toLocaleString('en-IN')} via {settlement.payment_mode.replace(/_/g,' ')}</p></div>
                 </div>
@@ -448,12 +476,26 @@ export default function PaymentPage() {
                       </tbody>
                     </table>
 
-                    {/* Amount in Words + Payment Ref */}
+                    {/* Totals + Pledge Deduction + Amount in Words */}
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '16px' }}>
                       <tbody>
                         <tr>
-                          <td style={lb} width="180">Amount In Words</td>
-                          <td style={{ ...vl, fontStyle: 'italic' }}>{invoice.amount_in_words || numberToWords(totalNet) + ' Rupees Only'}</td>
+                          <td style={lb} width="180">Total Net Amount</td>
+                          <td style={{ ...vl, fontWeight: 'bold', fontSize: '12px' }}>₹{totalNet.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                        {pledgeDue > 0 && (<>
+                          <tr>
+                            <td style={{ ...lb, color: '#dc2626' }}>Less: Pledge Total Due</td>
+                            <td style={{ ...vl, color: '#dc2626', fontWeight: 'bold' }}>- ₹{pledgeDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                          <tr>
+                            <td style={{ ...lb, background: '#e8f5e9' }}>Amount Payable to Customer</td>
+                            <td style={{ ...vl, fontWeight: 'bold', fontSize: '13px', color: '#16a34a' }}>₹{payableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        </>)}
+                        <tr>
+                          <td style={lb}>Amount In Words</td>
+                          <td style={{ ...vl, fontStyle: 'italic' }}>{numberToWords(Math.round(Math.abs(pledgeDue > 0 ? payableAmount : totalNet)))} Rupees Only</td>
                         </tr>
                         <tr>
                           <td style={lb}>Note: Payment Reference No.</td>
@@ -461,6 +503,7 @@ export default function PaymentPage() {
                         </tr>
                       </tbody>
                     </table>
+                    
 
                     {/* Terms & Conditions */}
                     <div style={{ marginBottom: '16px' }}>

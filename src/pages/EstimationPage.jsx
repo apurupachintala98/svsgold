@@ -30,13 +30,33 @@ export default function EstimationPage() {
 
   const storedLogin = JSON.parse(localStorage.getItem('svs_gold_login_data') || '{}')
   const loggedInMobile = localStorage.getItem('user_mobile') || storedLogin?.mobile || ''
+  const [branchInfo, setBranchInfo] = useState(null)
+
+  // Fetch branch info based on application place
+  useEffect(() => {
+    if (!application) return
+    const place = (application?.application?.place || application?.place || '').toLowerCase().trim()
+    if (!place) return
+    ;(async () => {
+      try {
+        const res = await applicationsAPI.getBranches()
+        const branches = res.data?.branches || []
+        let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+        if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+        if (matched) setBranchInfo(matched)
+      } catch {}
+    })()
+  }, [application])
 
   /* ================================================================ */
-  /*  PRE-FILL FROM ORNAMENTS (from finalPreview via application)     */
+  /*  PRE-FILL FROM ORNAMENTS (filtered by application_id)            */
   /* ================================================================ */
   useEffect(() => {
     if (!application) return
-    const ornaments = application.ornaments || []
+    const appId = application?.application?.application_id || application?._appEstimation?.application_id
+    const allOrnaments = application.ornaments || []
+    // Filter ornaments by application_id
+    const ornaments = appId ? allOrnaments.filter(o => o.application_id === appId) : allOrnaments
     if (ornaments.length > 0 && items.length === 0) {
       setItems(ornaments.map((o, i) => ({
         id: Date.now() + i,
@@ -49,7 +69,7 @@ export default function EstimationPage() {
         deduction_percentage: 0
       })))
     }
-  }, [application])
+    }, [application])
 
   /* ---- Styles ---- */
   const inputClass = 'w-full px-4 py-3 bg-gradient-to-b from-white to-gray-50 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all duration-300 shadow-sm hover:shadow-md hover:border-gray-300'
@@ -81,7 +101,13 @@ export default function EstimationPage() {
   /* ---- Pledge Release: deduct total_due from grand total ---- */
   const appType = application?.application?.application_type || ''
   const isPledgeRelease = appType === 'PLEDGE_RELEASE'
-  const totalDue = parseFloat(application?.pledge_details?.total_due) || 0
+  const appId = application?.application?.application_id
+  // pledge_details is an array from searchCustomer — find by application_id
+  const allPledges = application?.pledge_details || []
+  const appPledge = Array.isArray(allPledges)
+    ? allPledges.find(p => p.application_id === appId) || allPledges[0] || {}
+    : allPledges || {}
+  const totalDue = parseFloat(appPledge.total_due) || 0
   const finalAmount = isPledgeRelease ? Math.round((grandTotal - totalDue) * 100) / 100 : grandTotal
 
   /* ---- Validate ---- */
@@ -91,6 +117,8 @@ export default function EstimationPage() {
       if (!items[i].item_name?.trim()) { setError(`Item ${i + 1}: name is required`); return false }
       if (!parseFloat(items[i].gross_weight_gms)) { setError(`Item ${i + 1}: gross weight is required`); return false }
       if (!parseFloat(items[i].gold_rate_per_gm)) { setError(`Item ${i + 1}: gold rate is required`); return false }
+      if (String(items[i].purity_percentage).includes('.')) { setError(`Item ${i + 1}: purity must be a whole number (no decimals)`); return false }
+      if (!parseFloat(items[i].deduction_percentage) || parseFloat(items[i].deduction_percentage) <= 0) { setError(`Item ${i + 1}: deduction percentage must be greater than 0`); return false }
     }
     return true
   }
@@ -303,7 +331,7 @@ export default function EstimationPage() {
                         </div>
                         <div>
                           <label className={labelClass}>Purity %</label>
-                          <input type="text" value={item.purity_percentage} onChange={(e) => updateItem(index, 'purity_percentage', e.target.value.replace(/[^0-9.]/g, ''))} className={inputClass} />
+                          <input type="text" value={item.purity_percentage} onChange={(e) => updateItem(index, 'purity_percentage', e.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
                         </div>
                       </div>
 
@@ -412,7 +440,7 @@ export default function EstimationPage() {
               return (
               <div className="space-y-6">
                 {/* Success banner */}
-                <div className="flex items-start gap-3 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                <div className="flex items-start gap-3 p-4 bg-green-50 border-2 border-green-200 rounded-xl mb-4">
                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0"><Check size={18} className="text-white" /></div>
                   <div>
                     <p className="text-sm text-green-800 font-medium">Estimation Saved Successfully</p>
@@ -427,9 +455,8 @@ export default function EstimationPage() {
                   <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ color: '#fff', lineHeight: '1.5' }}>
                       <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Himayathnagar</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>98855 88220</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Himayathnagar, Hyderabad - 29'}</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
                       <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
                     </div>
                     <div style={{ textAlign: 'center', color: '#fff' }}>

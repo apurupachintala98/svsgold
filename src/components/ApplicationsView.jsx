@@ -254,24 +254,6 @@ export default function ApplicationsView({
           <ChevronLeft size={20} /> Back to Applications
         </button>
 
-        {/* Completion Warning — only show for DRAFT apps that are genuinely incomplete */}
-        {!detailLoading && isDraft && !complete && (
-          <div className="flex items-start gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
-            <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
-            <div>
-              <p className="text-sm text-amber-800 font-medium">Application Incomplete — Status: DRAFT</p>
-              <p className="text-xs text-amber-600 mt-1">
-                {missing.length > 0
-                  ? `${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} missing.`
-                  : 'Complete all steps and click "Accept & Continue" to submit.'
-                }
-              </p>
-              <button onClick={() => handleEditApplication(selectedApplication)} className="mt-3 flex items-center gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-all text-sm">
-                <Edit size={16} /> Edit & Complete
-              </button>
-            </div>
-          </div>
-        )}
 
         {detailLoading && (
           <div className="flex items-center justify-center h-64">
@@ -317,14 +299,12 @@ export default function ApplicationsView({
                       <DetailField icon={<Building2 size={16} className="text-amber-600" />} label="Financier" value={detailData.pledge_details.financier_name || '—'} />
                       <DetailField icon={<Building2 size={16} className="text-amber-600" />} label="Branch" value={detailData.pledge_details.branch_name || '—'} />
                       <DetailField icon={<Hash size={16} className="text-amber-600" />} label="Gold Loan A/C" value={detailData.pledge_details.gold_loan_account_no || '—'} />
-                     
                       <DetailField icon={<MapPin size={16} className="text-amber-600" />} label="Address" value={detailData.pledge_details.pledger_address || '—'} />
                     </div>
                     <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <AmountCard label="Principal" amount={detailData.pledge_details.principal_amount} />
                       <AmountCard label="Interest" amount={detailData.pledge_details.interest_amount} />
                       <AmountCard label="Total Due" amount={detailData.pledge_details.total_due} highlight />
-                     
                     </div>
                   </div>
                 </div>
@@ -522,11 +502,7 @@ export default function ApplicationsView({
                   <button onClick={() => handleViewApplication(app)} className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
                     <Eye size={16} /> View
                   </button>
-                  {isDraft && (
-                    <button onClick={() => handleEditApplication(app)} className="flex items-center gap-2 px-5 py-2.5 text-white font-semibold rounded-xl transition-all text-sm" style={{ background: 'linear-gradient(135deg, #c9943a, #a36e24)' }}>
-                      <Edit size={16} /> Continue
-                    </button>
-                  )}
+                 
                 </div>
               </div>
             </div>
@@ -565,23 +541,38 @@ function AmountCard({ label, amount, highlight = false, suffix = '' }) {
 function EstimationPdfView({ userIdentifier }) {
   const [data, setData] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
+  const [branchInfo, setBranchInfo] = React.useState(null)
 
   React.useEffect(() => {
     (async () => {
-      try {
+     try {
         const r = await accountsAPI.searchCustomer(userIdentifier)
         const d = r.data || {}
         const ests = d.estimations || []
-        const latest = ests.length > 0 ? ests[ests.length - 1] : null
+        // Find estimation matching the applicationId, fallback to latest
+        const latest = applicationId
+          ? ests.find(e => e.application_id === applicationId) || (ests.length > 0 ? ests[ests.length - 1] : null)
+          : (ests.length > 0 ? ests[ests.length - 1] : null)
         const allPledges = d.pledge_details || []
-        const appPledge = latest?.application_id ? allPledges.find(p => p.application_id === latest.application_id) : allPledges[0]
+        const appPledge = (latest?.application_id || applicationId) ? allPledges.find(p => p.application_id === (latest?.application_id || applicationId)) : allPledges[0]
+        const appObj = (d.applications || []).find(a => a.application_id === (latest?.application_id || applicationId)) || {}
+
+        // Fetch branch info
+        try {
+          const br = await applicationsAPI.getBranches()
+          const branches = br.data?.branches || []
+          const place = (appObj.place || '').toLowerCase().trim()
+          let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+          if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+          if (matched) setBranchInfo(matched)
+        } catch {}
 
         setData({
           account: d.customer || {},
           addresses: d.addresses || [],
           pledge_details: appPledge || null,
           estimation: latest ? { ...latest, items: latest.items || [], summary: { total_net_amount: latest.total_net_amount, estimation_no: latest.estimation_no } } : {},
-          application: (d.applications || []).find(a => a.application_id === latest?.application_id) || {}
+          application: appObj
         })
       } catch {} finally { setLoading(false) }
     })()
@@ -638,9 +629,8 @@ function EstimationPdfView({ userIdentifier }) {
         <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#fff', lineHeight: '1.5' }}>
             <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Himayathnagar</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>98855 88220</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Himayathnagar, Hyderabad - 29'}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
             <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
           </div>
           <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>ESTIMATION COPY</div></div>
@@ -742,12 +732,29 @@ function EstimationPdfView({ userIdentifier }) {
 function PaymentPdfView({ userIdentifier, applicationId }) {
   const [data, setData] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
+  const [branchInfo, setBranchInfo] = React.useState(null)
 
   React.useEffect(() => {
     (async () => {
       try {
         const r = await accountsAPI.searchCustomer(userIdentifier)
-        setData(r.data || {})
+        const d = r.data || {}
+        setData(d)
+
+        // Find the app to get place, then match branch
+        const apps = d.applications || []
+        const invoices = d.invoices || []
+        const inv = applicationId ? invoices.find(i => i.application_id === applicationId) : invoices[invoices.length - 1]
+        const app = apps.find(a => a.application_id === (inv?.application_id || applicationId)) || apps[0] || {}
+
+        try {
+          const br = await applicationsAPI.getBranches()
+          const branches = br.data?.branches || []
+          const place = (app.place || '').toLowerCase().trim()
+          let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+          if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+          if (matched) setBranchInfo(matched)
+        } catch {}
       } catch {} finally { setLoading(false) }
     })()
   }, [userIdentifier])
@@ -792,9 +799,8 @@ function PaymentPdfView({ userIdentifier, applicationId }) {
         <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#fff', lineHeight: '1.5' }}>
             <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Narayanguda</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>9885588220</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Narayanguda, Hyderabad - 29'}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
             <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
           </div>
           <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>PAYMENT VOUCHER</div></div>

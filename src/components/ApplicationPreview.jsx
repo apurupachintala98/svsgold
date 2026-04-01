@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, Loader, AlertCircle, Download, Printer, FileDown } from 'lucide-react'
-import { accountsAPI } from '../api/api'
+import { ChevronLeft, Loader, AlertCircle, Download, Printer } from 'lucide-react'
+import { accountsAPI, applicationsAPI } from '../api/api'
 import PdfGenerator from '../utils/PdfGenerator'
 import { useNavigate } from 'react-router-dom'
 
@@ -11,6 +12,23 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [branchInfo, setBranchInfo] = useState(null)
+
+  // Fetch branch info — match place to branches API for full_address_txt
+  useEffect(() => {
+    const place = (application?.place || application?.application?.place || previewData?.application?.place || '').toLowerCase().trim()
+    if (!place) return
+    ;(async () => {
+      try {
+        const res = await applicationsAPI.getBranches()
+        const branches = res.data?.branches || []
+        // Try exact match first, then partial match
+        let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+        if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+        if (matched) setBranchInfo(matched)
+      } catch (e) { console.log('Branch fetch failed:', e) }
+    })()
+  }, [application, previewData])
 
   useEffect(() => {
     (async () => {
@@ -107,7 +125,7 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
       {/* Action bar */}
       <div className="flex items-center justify-between no-print">
         <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 text-amber-700 hover:bg-amber-50 rounded-xl font-medium transition-colors"><ChevronLeft size={20} /> Back to Applications</button>
-       
+      
       </div>
 
       {error && <div className="flex items-start gap-3 p-4 bg-red-50 border-2 border-red-200 rounded-xl"><AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} /><span className="text-sm text-red-700">{error}</span></div>}
@@ -122,9 +140,8 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
           <div style={{ background: hBg, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ color: '#fff', lineHeight: '1.5' }}>
               <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-              <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Narayanguda,</div>
-              <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
-              <div style={{ fontSize: '10px', opacity: .85 }}>98855 88220</div>
+              <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt}</div>
+              <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number}</div>
               <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
             </div>
             <div style={{ textAlign: 'center', color: '#fff' }}>
@@ -347,7 +364,9 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
         const isSubmitted = ['SUBMITTED','APPROVED','COMPLETED'].includes(status)
         return (
           <>
-            <div className="flex justify-center"><button onClick={handlePrint} className="px-6 py-2.5 bg-white text-gray-700 font-medium rounded-xl shadow-sm border border-gray-200 flex items-center gap-2 text-sm hover:bg-gray-50"><FileDown size={16} /> Print / Download</button></div>
+            <div className="flex justify-center no-print">
+              <button onClick={handlePrint} className="px-8 py-3 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-md flex items-center justify-center gap-2 border border-gray-200 transition-all"><Printer size={20} /> Print Application</button>
+            </div>
             {!isSubmitted && (
               <div className="flex justify-center no-print">
                 <button onClick={() => navigate('/estimation', { state: { application: previewData } })} className="px-10 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
