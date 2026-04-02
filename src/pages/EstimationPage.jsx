@@ -331,7 +331,7 @@ export default function EstimationPage() {
                         </div>
                         <div>
                           <label className={labelClass}>Purity %</label>
-                          <input type="text" value={item.purity_percentage} onChange={(e) => updateItem(index, 'purity_percentage', e.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+                          <input type="text" value={item.purity_percentage} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); if (v === '' || parseInt(v) <= 100) updateItem(index, 'purity_percentage', v) }} className={inputClass} />
                         </div>
                       </div>
 
@@ -455,8 +455,8 @@ export default function EstimationPage() {
                   <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ color: '#fff', lineHeight: '1.5' }}>
                       <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Himayathnagar, Hyderabad - 29'}</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt}</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number}</div>
                       <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
                     </div>
                     <div style={{ textAlign: 'center', color: '#fff' }}>

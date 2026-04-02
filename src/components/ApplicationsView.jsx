@@ -254,6 +254,24 @@ export default function ApplicationsView({
           <ChevronLeft size={20} /> Back to Applications
         </button>
 
+        {/* Completion Warning — only show for DRAFT apps that are genuinely incomplete */}
+        {!detailLoading && isDraft && !complete && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+            <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="text-sm text-amber-800 font-medium">Application Incomplete — Status: DRAFT</p>
+              <p className="text-xs text-amber-600 mt-1">
+                {missing.length > 0
+                  ? `${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} missing.`
+                  : 'Complete all steps and click "Accept & Continue" to submit.'
+                }
+              </p>
+              <button onClick={() => handleEditApplication(selectedApplication)} className="mt-3 flex items-center gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-all text-sm">
+                <Edit size={16} /> Edit & Complete
+              </button>
+            </div>
+          </div>
+        )}
 
         {detailLoading && (
           <div className="flex items-center justify-center h-64">
@@ -433,12 +451,12 @@ export default function ApplicationsView({
             )}
             {selectedPdf === 'estimation-pdf' && (
               <div className="mt-6">
-                <EstimationPdfView userIdentifier={userIdentifier} />
+                <EstimationPdfView userIdentifier={userIdentifier} applicationId={selectedApplication?.application_id} />
               </div>
             )}
             {selectedPdf === 'payment-pdf' && (
               <div className="mt-6">
-                <PaymentPdfView userIdentifier={userIdentifier} />
+                <PaymentPdfView userIdentifier={userIdentifier} applicationId={selectedApplication?.application_id} />
               </div>
             )}
             </div>
@@ -502,7 +520,7 @@ export default function ApplicationsView({
                   <button onClick={() => handleViewApplication(app)} className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-all">
                     <Eye size={16} /> View
                   </button>
-                 
+                  
                 </div>
               </div>
             </div>
@@ -538,14 +556,14 @@ function AmountCard({ label, amount, highlight = false, suffix = '' }) {
 /* ================================================================ */
 /*  ESTIMATION PDF VIEW — fetches data and shows estimation preview  */
 /* ================================================================ */
-function EstimationPdfView({ userIdentifier }) {
+function EstimationPdfView({ userIdentifier, applicationId }) {
   const [data, setData] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [branchInfo, setBranchInfo] = React.useState(null)
 
   React.useEffect(() => {
     (async () => {
-     try {
+      try {
         const r = await accountsAPI.searchCustomer(userIdentifier)
         const d = r.data || {}
         const ests = d.estimations || []
@@ -554,17 +572,21 @@ function EstimationPdfView({ userIdentifier }) {
           ? ests.find(e => e.application_id === applicationId) || (ests.length > 0 ? ests[ests.length - 1] : null)
           : (ests.length > 0 ? ests[ests.length - 1] : null)
         const allPledges = d.pledge_details || []
-        const appPledge = (latest?.application_id || applicationId) ? allPledges.find(p => p.application_id === (latest?.application_id || applicationId)) : allPledges[0]
-        const appObj = (d.applications || []).find(a => a.application_id === (latest?.application_id || applicationId)) || {}
+        const targetAppId = applicationId || latest?.application_id
+        const appPledge = targetAppId ? allPledges.find(p => p.application_id === targetAppId) : allPledges[0]
+        // Always find app by applicationId first, fallback to estimation's app
+        const appObj = (d.applications || []).find(a => a.application_id === (applicationId || latest?.application_id)) || {}
 
         // Fetch branch info
         try {
           const br = await applicationsAPI.getBranches()
           const branches = br.data?.branches || []
           const place = (appObj.place || '').toLowerCase().trim()
-          let matched = branches.find(b => b.branch_name.toLowerCase() === place)
-          if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
-          if (matched) setBranchInfo(matched)
+          if (place) {
+            let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+            if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+            if (matched) setBranchInfo(matched)
+          }
         } catch {}
 
         setData({
@@ -576,7 +598,7 @@ function EstimationPdfView({ userIdentifier }) {
         })
       } catch {} finally { setLoading(false) }
     })()
-  }, [userIdentifier])
+  }, [userIdentifier, applicationId])
 
   if (loading) return <div className="text-center py-20"><Loader size={36} className="animate-spin mx-auto text-amber-600" /><p className="text-gray-600 mt-4">Loading Estimation...</p></div>
 
@@ -629,8 +651,8 @@ function EstimationPdfView({ userIdentifier }) {
         <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#fff', lineHeight: '1.5' }}>
             <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Himayathnagar, Hyderabad - 29'}</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number}</div>
             <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
           </div>
           <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>ESTIMATION COPY</div></div>
@@ -741,23 +763,26 @@ function PaymentPdfView({ userIdentifier, applicationId }) {
         const d = r.data || {}
         setData(d)
 
-        // Find the app to get place, then match branch
+        // Find the app to get place — prioritize applicationId
         const apps = d.applications || []
         const invoices = d.invoices || []
         const inv = applicationId ? invoices.find(i => i.application_id === applicationId) : invoices[invoices.length - 1]
-        const app = apps.find(a => a.application_id === (inv?.application_id || applicationId)) || apps[0] || {}
+        // Always find app by applicationId first
+        const app = apps.find(a => a.application_id === applicationId) || apps.find(a => a.application_id === inv?.application_id) || apps[0] || {}
 
         try {
           const br = await applicationsAPI.getBranches()
           const branches = br.data?.branches || []
           const place = (app.place || '').toLowerCase().trim()
-          let matched = branches.find(b => b.branch_name.toLowerCase() === place)
-          if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
-          if (matched) setBranchInfo(matched)
+          if (place) {
+            let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+            if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+            if (matched) setBranchInfo(matched)
+          }
         } catch {}
       } catch {} finally { setLoading(false) }
     })()
-  }, [userIdentifier])
+  }, [userIdentifier, applicationId])
 
   if (loading) return <div className="text-center py-20"><Loader size={36} className="animate-spin mx-auto text-amber-600" /><p className="text-gray-600 mt-4">Loading Payment Voucher...</p></div>
 
@@ -779,6 +804,26 @@ function PaymentPdfView({ userIdentifier, applicationId }) {
   const cur = (n) => n != null ? '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '₹0.00'
   const totalNet = invItems.reduce((s, it) => s + (parseFloat(it.net_amount) || 0), 0)
 
+  // Pledge deduction
+  const allPledges = data?.pledge_details || []
+  const appPledge = Array.isArray(allPledges) ? allPledges.find(p => p.application_id === (app.application_id || applicationId)) : allPledges
+  const pledgeDue = parseFloat(appPledge?.total_due || 0)
+  const isPR = app.application_type === 'PLEDGE_RELEASE'
+  const payableAmount = Math.round((totalNet - pledgeDue) * 100) / 100
+
+  const numToWords = (n) => {
+    if (!n || n === 0) return 'Zero'
+    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
+    const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']
+    const num = Math.floor(Math.abs(n))
+    if (num < 20) return a[num]
+    if (num < 100) return b[Math.floor(num/10)] + (num%10 ? ' ' + a[num%10] : '')
+    if (num < 1000) return a[Math.floor(num/100)] + ' Hundred' + (num%100 ? ' and ' + numToWords(num%100) : '')
+    if (num < 100000) return numToWords(Math.floor(num/1000)) + ' Thousand' + (num%1000 ? ' ' + numToWords(num%1000) : '')
+    if (num < 10000000) return numToWords(Math.floor(num/100000)) + ' Lakh' + (num%100000 ? ' ' + numToWords(num%100000) : '')
+    return numToWords(Math.floor(num/10000000)) + ' Crore' + (num%10000000 ? ' ' + numToWords(num%10000000) : '')
+  }
+
   const blue = '#2c5f8a'; const cb = '1px solid #6a9ec7'
   const lb = { border: cb, padding: '6px 10px', fontWeight: 'bold', background: '#f0f6fb', fontSize: '11px' }
   const vl = { border: cb, padding: '6px 10px', fontSize: '11px' }
@@ -799,8 +844,8 @@ function PaymentPdfView({ userIdentifier, applicationId }) {
         <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#fff', lineHeight: '1.5' }}>
             <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt || '3-4-659/3, YMCA, Narayanguda, Hyderabad - 29'}</div>
-            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number || '9885588220'}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt}</div>
+            <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number}</div>
             <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
           </div>
           <div style={{ textAlign: 'center', color: '#fff' }}><div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' }}>PAYMENT VOUCHER</div></div>
@@ -894,9 +939,14 @@ function PaymentPdfView({ userIdentifier, applicationId }) {
             </tbody>
           </table>
 
-          {/* Amount in Words & Payment Reference */}
+          {/* Totals + Pledge Deduction + Amount in Words */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}><tbody>
-            <tr><td style={lb} width="160">Amount In Words</td><td style={{ ...vl, fontStyle: 'italic' }}>{inv.amount_in_words || ''}</td></tr>
+            <tr><td style={lb} width="180">Total Net Amount</td><td style={{ ...vl, fontWeight: 'bold', fontSize: '12px' }}>{cur(inv.total_net_amount || totalNet)}</td></tr>
+            {isPR && pledgeDue > 0 && (<>
+              <tr><td style={{ ...lb, color: '#dc2626' }}>Less: Pledge Total Due</td><td style={{ ...vl, color: '#dc2626', fontWeight: 'bold' }}>- {cur(pledgeDue)}</td></tr>
+              <tr><td style={{ ...lb, background: '#e8f5e9' }}>Amount Payable to Customer</td><td style={{ ...vl, fontWeight: 'bold', fontSize: '13px', color: '#16a34a' }}>{cur(payableAmount)}</td></tr>
+            </>)}
+            <tr><td style={lb}>Amount In Words</td><td style={{ ...vl, fontStyle: 'italic' }}>{inv.amount_in_words || (numToWords(Math.round(Math.abs(isPR && pledgeDue > 0 ? payableAmount : totalNet))) + ' Rupees Only')}</td></tr>
             <tr><td style={lb}>Note: Payment Reference No.</td><td style={vl}>{settlement.reference_no || inv.remarks || '—'}</td></tr>
           </tbody></table>
 

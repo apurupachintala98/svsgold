@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react'
 import { ChevronLeft, Loader, AlertCircle, Download, Printer } from 'lucide-react'
 import { accountsAPI, applicationsAPI } from '../api/api'
@@ -14,39 +13,26 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
   const [downloading, setDownloading] = useState(false)
   const [branchInfo, setBranchInfo] = useState(null)
 
-  // Fetch branch info — match place to branches API for full_address_txt
-  useEffect(() => {
-    const place = (application?.place || application?.application?.place || previewData?.application?.place || '').toLowerCase().trim()
-    if (!place) return
-    ;(async () => {
-      try {
-        const res = await applicationsAPI.getBranches()
-        const branches = res.data?.branches || []
-        // Try exact match first, then partial match
-        let matched = branches.find(b => b.branch_name.toLowerCase() === place)
-        if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
-        if (matched) setBranchInfo(matched)
-      } catch (e) { console.log('Branch fetch failed:', e) }
-    })()
-  }, [application, previewData])
-
   useEffect(() => {
     (async () => {
       try {
         setLoading(true)
-        let preview = {}
 
+        // Fetch customer data
         const res = await accountsAPI.searchCustomer(userIdentifier)
         const d = res.data || {}
         const appId = application?.application_id
 
-        // Match pledge & ornaments by application_id
+        // Find the application from search API to get correct place
+        const allApps = d.applications || []
+        const appObj = appId ? allApps.find(a => a.application_id === appId) : allApps[0] || {}
+
         const allPledges = d.pledge_details || []
         const appPledge = appId ? allPledges.find(p => p.application_id === appId) : allPledges[0]
         const allOrnaments = d.ornaments || []
         const appOrnaments = appId ? allOrnaments.filter(o => o.application_id === appId) : allOrnaments
 
-        preview = {
+        const preview = {
           account: d.customer || {},
           addresses: d.addresses || [],
           documents: d.documents || [],
@@ -57,10 +43,29 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
 
         if (application) preview.application = { ...preview.application, ...application }
         setPreviewData(preview)
-      } catch { setError('Failed to load preview data.') }
+        setError('')
+
+        // Fetch branch info using place from search API application
+        try {
+          const br = await applicationsAPI.getBranches()
+          const branches = br.data?.branches || []
+          const place = (appObj?.place || application?.place || '').toLowerCase().trim()
+          if (place) {
+            let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+            if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+            if (matched) setBranchInfo(matched)
+          }
+        } catch {}
+
+      } catch (err) {
+        console.log('Preview load error:', err)
+        // Only show error if no data was loaded
+        if (!previewData) setError('Failed to load preview data.')
+      }
       finally { setLoading(false) }
     })()
   }, [application, userIdentifier])
+
 
   const handleDownloadPdf = async () => {
     if (!previewData) return
@@ -125,7 +130,6 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
       {/* Action bar */}
       <div className="flex items-center justify-between no-print">
         <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 text-amber-700 hover:bg-amber-50 rounded-xl font-medium transition-colors"><ChevronLeft size={20} /> Back to Applications</button>
-      
       </div>
 
       {error && <div className="flex items-start gap-3 p-4 bg-red-50 border-2 border-red-200 rounded-xl"><AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} /><span className="text-sm text-red-700">{error}</span></div>}
@@ -280,7 +284,7 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '10px' }}>
               <table style={{ fontSize: '11px', borderCollapse: 'collapse' }}><tbody>
                 <tr><td style={lbl}>Date</td><td style={{ ...val, minWidth: '150px' }}>{app.application_date || ''}</td></tr>
-                <tr><td style={lbl}>Place</td><td style={val}>{app.place || ''}</td></tr>
+                <tr><td style={lbl}>Place</td><td style={val}>{app.branch || ''}</td></tr>
               </tbody></table>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ width: '220px', borderBottom: '1px solid #666', paddingBottom: '40px', marginBottom: '4px' }}></div>
@@ -328,7 +332,7 @@ export default function ApplicationPreview({ application, userIdentifier, onBack
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px' }}>
               <table style={{ fontSize: '11px', borderCollapse: 'collapse' }}><tbody>
                 <tr><td style={lbl}>Date</td><td style={{ ...val, minWidth: '150px' }}>{app.application_date || ''}</td></tr>
-                <tr><td style={lbl}>Place</td><td style={val}>{app.place || ''}</td></tr>
+                <tr><td style={lbl}>Place</td><td style={val}>{app.branch || ''}</td></tr>
               </tbody></table>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ width: '220px', borderBottom: '1px solid #666', paddingBottom: '40px', marginBottom: '4px' }}></div>

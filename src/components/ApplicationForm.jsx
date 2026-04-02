@@ -732,8 +732,7 @@ export default function ApplicationForm({
               <input
                 type="text"
                 value={ornament.purity_percentage}
-                onChange={(e) => updateOrnament(index, 'purity_percentage', e.target.value.replace(/[^0-9]/g, ''))}
-                placeholder="Enter purity %"
+                onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); if (v === '' || parseInt(v) <= 100) updateOrnament(index, 'purity_percentage', v) }}                placeholder="Enter purity %"
                 className={inputClass}
               />
             </div>

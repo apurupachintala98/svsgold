@@ -4,7 +4,7 @@ import {
   Loader, Plus, Trash2, ChevronLeft, ChevronRight, AlertCircle, Save, Check,
   FileText, CreditCard, Receipt, Banknote, Eye, LogOut, Menu, X, Home, Calculator, Download
 } from 'lucide-react'
-import { paymentsAPI, accountsAPI } from '../api/api'
+import { paymentsAPI, accountsAPI, applicationsAPI } from '../api/api'
 
 export default function PaymentPage() {
   const location = useLocation()
@@ -17,6 +17,22 @@ export default function PaymentPage() {
   const loggedInMobile = localStorage.getItem('user_mobile') || storedLogin?.mobile || ''
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [branchInfo, setBranchInfo] = useState(null)
+
+  // Fetch branch info
+  useEffect(() => {
+    const place = (appData?.application?.place || '').toLowerCase().trim()
+    if (!place) return
+    ;(async () => {
+      try {
+        const res = await applicationsAPI.getBranches()
+        const branches = res.data?.branches || []
+        let matched = branches.find(b => b.branch_name.toLowerCase() === place)
+        if (!matched) matched = branches.find(b => b.branch_name.toLowerCase().includes(place) || place.includes(b.branch_name.toLowerCase()))
+        if (matched) setBranchInfo(matched)
+      } catch {}
+    })()
+  }, [appData])
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -273,6 +289,7 @@ export default function PaymentPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div><label className={labelClass}>Invoice Number</label><div className={readOnlyClass}>{invoice.invoice_no}</div></div>
                     <div><label className={labelClass}>Invoice Date</label><input type="date" value={invoice.invoice_date} onChange={e => setInvoice(p => ({ ...p, invoice_date: e.target.value }))} className={inputClass} /></div>
+                    <div><label className={labelClass}>Estimation Total</label><div className={readOnlyClass}>₹{Number(estimationTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div></div>
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
@@ -290,7 +307,7 @@ export default function PaymentPage() {
                         <div><label className={labelClass}>Wt After Melting (g)</label><input type="text" value={item.weight_after_melting} onChange={e => updateInvoiceItem(idx, 'weight_after_melting', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div><label className={labelClass}>Purity After (%)</label><input type="text" value={item.purity_after_melting} onChange={e => updateInvoiceItem(idx, 'purity_after_melting', e.target.value.replace(/[^0-9]/g,''))} className={inputClass} /></div>
+                        <div><label className={labelClass}>Purity After (%)</label><input type="text" value={item.purity_after_melting} onChange={e => { const v = e.target.value.replace(/[^0-9]/g,''); if (v === '' || parseInt(v) <= 100) updateInvoiceItem(idx, 'purity_after_melting', v) }} className={inputClass} /></div>
                         <div><label className={labelClass}>Gold Rate/gm (₹)</label><input type="text" value={item.gold_rate_per_gm} onChange={e => updateInvoiceItem(idx, 'gold_rate_per_gm', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
                         <div><label className={labelClass}>Gross Amount (₹)</label><div className="px-4 py-3 bg-amber-50 border-2 border-amber-100 rounded-xl text-amber-800 font-semibold">₹{(item.gross_amount || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</div></div>
                         <div><label className={labelClass}>Deductions (%)</label><input type="text" value={item.deduction_percentage} onChange={e => updateInvoiceItem(idx, 'deduction_percentage', e.target.value.replace(/[^0-9.]/g,''))} className={inputClass} /></div>
@@ -366,7 +383,7 @@ export default function PaymentPage() {
               return (
               <div className="space-y-6">
                 {/* Success */}
-                <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex items-start gap-4 mb-4">
+                <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 flex items-start gap-4">
                   <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0"><Check size={22} className="text-white" /></div>
                   <div><h3 className="text-lg font-bold text-green-800">Payment Completed!</h3><p className="text-sm text-green-600 mt-1">Invoice {invoice.invoice_no} • ₹{settlement.paid_amount.toLocaleString('en-IN')} via {settlement.payment_mode.replace(/_/g,' ')}</p></div>
                 </div>
@@ -378,9 +395,8 @@ export default function PaymentPage() {
                   <div style={{ background: `linear-gradient(180deg, #3a7ab5, ${blue})`, padding: '18px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ color: '#fff', lineHeight: '1.5' }}>
                       <div style={{ fontSize: '16px', fontWeight: 'bold' }}>SVS GOLD PRIVATE LIMITED</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>3-4-659/3, YMCA, Narayanguda</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>Himayathnagar, Hyderabad - 29</div>
-                      <div style={{ fontSize: '10px', opacity: .85 }}>9885588220</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.full_address_txt}</div>
+                      <div style={{ fontSize: '10px', opacity: .85 }}>{branchInfo?.phone_number}</div>
                       <div style={{ fontSize: '10px', opacity: .85 }}>www.svsgold.com</div>
                     </div>
                     <div style={{ textAlign: 'center', color: '#fff' }}>
@@ -503,7 +519,7 @@ export default function PaymentPage() {
                         </tr>
                       </tbody>
                     </table>
-                    
+                 
 
                     {/* Terms & Conditions */}
                     <div style={{ marginBottom: '16px' }}>
